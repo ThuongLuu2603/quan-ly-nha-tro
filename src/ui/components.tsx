@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { formatMoney, parseMoneyInput } from '../domain/money'
 
 export function Card({
@@ -45,6 +45,15 @@ export function Field({
   )
 }
 
+/**
+ * Giu chu dang go trong state rieng thay vi doc thang tu prop.
+ *
+ * O trang Cai dat, moi phim go deu ghi xuong IndexedDB roi doi gia tri vong ve
+ * qua useLiveQuery. Vong lap do tre vai nhip nen neu o nhap doc thang tu prop
+ * thi chu cu se de len chu moi: go nhanh bi rot chu, con bo go tieng Viet
+ * (Unikey, ban phim Android) mat dau vet dang sua nen cho ra chu vo nghia kieu
+ * "Dong.g.g". Khi con tro dang o trong o thi khong nhan gia tri tu ngoai vao.
+ */
 export function TextInput({
   value,
   onChange,
@@ -58,14 +67,41 @@ export function TextInput({
   type?: string
   inputMode?: 'text' | 'numeric' | 'tel' | 'decimal'
 }) {
+  const [draft, setDraft] = useState(value)
+  const typing = useRef(false)
+  const composing = useRef(false)
+
+  useEffect(() => {
+    if (typing.current) return
+    setDraft(value)
+  }, [value])
+
   return (
     <input
       className="input"
       type={type}
-      value={value}
+      value={draft}
       inputMode={inputMode}
       placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
+      onFocus={() => {
+        typing.current = true
+      }}
+      onBlur={() => {
+        typing.current = false
+        // Roi o thi hien lai dung thu da luu, vi du so tai khoan da bo dau cach.
+        setDraft(value)
+      }}
+      onCompositionStart={() => {
+        composing.current = true
+      }}
+      onCompositionEnd={(e) => {
+        composing.current = false
+        onChange(e.currentTarget.value)
+      }}
+      onChange={(e) => {
+        setDraft(e.target.value)
+        if (!composing.current) onChange(e.target.value)
+      }}
     />
   )
 }
@@ -80,12 +116,12 @@ export function MoneyInput({
   placeholder?: string
 }) {
   const [text, setText] = useState(() => (value ? formatMoney(value) : ''))
+  const typing = useRef(false)
 
+  // Cung ly do nhu TextInput: gia tri cu quay ve cham se de len so dang go.
   useEffect(() => {
-    const parsed = parseMoneyInput(text)
-    if (parsed !== value) setText(value ? formatMoney(value) : '')
-    // chi dong bo khi gia tri ben ngoai doi
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (typing.current) return
+    setText(value ? formatMoney(value) : '')
   }, [value])
 
   return (
@@ -94,6 +130,13 @@ export function MoneyInput({
       inputMode="numeric"
       value={text}
       placeholder={placeholder ?? '0'}
+      onFocus={() => {
+        typing.current = true
+      }}
+      onBlur={() => {
+        typing.current = false
+        setText(value ? formatMoney(value) : '')
+      }}
       onChange={(e) => {
         const parsed = parseMoneyInput(e.target.value)
         setText(parsed ? formatMoney(parsed) : '')
