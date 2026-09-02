@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type FocusEvent, type ReactNode } from 'react'
 import { formatMoney, formatNumber, parseMoneyInput, parseNumberInput } from '../domain/money'
 
 export function Card({
@@ -106,6 +106,10 @@ export function TextInput({
   )
 }
 
+function selectAllOnFocus(event: FocusEvent<HTMLInputElement>): void {
+  event.target.select()
+}
+
 export function MoneyInput({
   value,
   onChange,
@@ -117,13 +121,13 @@ export function MoneyInput({
   placeholder?: string
   disabled?: boolean
 }) {
-  const [text, setText] = useState(() => (value ? formatMoney(value) : ''))
+  const [text, setText] = useState(() => formatMoney(value))
   const typing = useRef(false)
 
   // Cung ly do nhu TextInput: gia tri cu quay ve cham se de len so dang go.
   useEffect(() => {
     if (typing.current) return
-    setText(value ? formatMoney(value) : '')
+    setText(formatMoney(value))
   }, [value])
 
   return (
@@ -133,16 +137,17 @@ export function MoneyInput({
       value={text}
       placeholder={placeholder ?? '0'}
       disabled={disabled}
-      onFocus={() => {
+      onFocus={(e) => {
         typing.current = true
+        selectAllOnFocus(e)
       }}
       onBlur={() => {
         typing.current = false
-        setText(value ? formatMoney(value) : '')
+        setText(formatMoney(value))
       }}
       onChange={(e) => {
         const parsed = parseMoneyInput(e.target.value)
-        setText(parsed ? formatMoney(parsed) : '')
+        setText(formatMoney(parsed))
         onChange(parsed)
       }}
     />
@@ -174,8 +179,9 @@ export function NumberInput({
       inputMode="decimal"
       value={text}
       placeholder={placeholder ?? '0'}
-      onFocus={() => {
+      onFocus={(e) => {
         typing.current = true
+        selectAllOnFocus(e)
       }}
       onBlur={() => {
         typing.current = false
