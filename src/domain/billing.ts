@@ -178,6 +178,11 @@ export function buildMonthlyInvoice(input: {
     }
   }
 
+  const garbageFee = room.garbageFee ?? 0
+  if (garbageFee > 0 && tenantWasHere) {
+    lines.push(line('garbage', 'Tiền rác', garbageFee))
+  }
+
   for (const fee of room.extraFees) {
     if (fee.amount !== 0) lines.push(line('other', fee.label, fee.amount))
   }

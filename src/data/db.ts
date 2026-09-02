@@ -41,6 +41,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bankAccountName: '',
   defaultElectricPrice: 4000,
   defaultWaterPrice: 20000,
+  defaultGarbageFee: 0,
   invoiceFooter: 'Cảm ơn quý khách. Vui lòng thanh toán khi nhận phiếu.',
 }
 

@@ -162,6 +162,12 @@ export function SettingsPage() {
             />
           </Field>
         </div>
+        <Field label="Tiền rác / tháng">
+          <MoneyInput
+            value={s.defaultGarbageFee ?? 0}
+            onChange={(value) => saveSettings({ defaultGarbageFee: value })}
+          />
+        </Field>
         <div className="hint" style={{ marginTop: 8 }}>
           Đổi ở đây không ảnh hưởng phòng đã tạo, mỗi phòng vẫn giữ giá riêng.
         </div>
@@ -229,6 +235,7 @@ export function SettingsPage() {
           </div>
           <div>
             Điện nước theo tháng dương lịch, phiếu phát trong tháng nào thì lấy số của tháng liền trước.
+            Tiền rác là khoản cố định mỗi kỳ (nếu đã nhập ở phòng).
           </div>
           <div>
             Khách vào giữa tháng thì thu tiền lẻ tới mốc kế tiếp rồi một kỳ tròn, các phiếu sau tự bỏ

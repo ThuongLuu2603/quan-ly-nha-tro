@@ -18,6 +18,8 @@ export interface Room {
   order: number
   electricPrice: number
   waterPrice: number
+  /** Khoan co dinh moi ky phat phieu, khong can chi so. */
+  garbageFee: number
   extraFees: ExtraFee[]
   defaultRent: number
   defaultDeposit: number
@@ -72,6 +74,7 @@ export type LineType =
   | 'rentRefund'
   | 'electric'
   | 'water'
+  | 'garbage'
   | 'deposit'
   | 'depositRefund'
   | 'carryOver'
@@ -130,6 +133,7 @@ export interface Settings {
   bankAccountName: string
   defaultElectricPrice: number
   defaultWaterPrice: number
+  defaultGarbageFee: number
   invoiceFooter: string
   lastBackupAt?: ISODate
   /** Neu co thi app tu dong bo voi Supabase khi co mang. */

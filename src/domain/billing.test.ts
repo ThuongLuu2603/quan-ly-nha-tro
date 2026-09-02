@@ -20,6 +20,7 @@ const room: Room = {
   order: 1,
   electricPrice: 4000,
   waterPrice: 20000,
+  garbageFee: 0,
   extraFees: [],
   defaultRent: 3_000_000,
   defaultDeposit: 3_000_000,
@@ -104,6 +105,18 @@ describe('phieu thang', () => {
       carryOver: 250_000,
     })
     expect(result.lines.some((l) => l.type === 'carryOver' && l.amount === 250_000)).toBe(true)
+  })
+
+  it('cong tien rac co dinh hang thang', () => {
+    const result = buildMonthlyInvoice({
+      room: { ...room, garbageFee: 50_000 },
+      tenancy: tenancy(),
+      issueDate: '2026-09-01',
+      readings: readingsToMap([reading('2026-07', 100, 10), reading('2026-08', 120, 12)]),
+      carryOver: 0,
+    })
+    expect(result.lines.some((l) => l.type === 'garbage' && l.amount === 50_000)).toBe(true)
+    expect(result.total).toBe(3_000_000 + 20 * 4000 + 2 * 20000 + 50_000)
   })
 
   it('canh bao khi thieu chi so', () => {

@@ -24,6 +24,7 @@ export function RoomFormSheet({
   const [cycleDay, setCycleDay] = useState(room?.defaultCycleDay ?? 1)
   const [electricPrice, setElectricPrice] = useState(room?.electricPrice ?? settings.defaultElectricPrice)
   const [waterPrice, setWaterPrice] = useState(room?.waterPrice ?? settings.defaultWaterPrice)
+  const [garbageFee, setGarbageFee] = useState(room?.garbageFee ?? settings.defaultGarbageFee ?? 0)
   const [extraFees, setExtraFees] = useState<ExtraFee[]>(room?.extraFees ?? [])
   const [note, setNote] = useState(room?.note ?? '')
   const [saving, setSaving] = useState(false)
@@ -35,6 +36,7 @@ export function RoomFormSheet({
       name: name.trim(),
       electricPrice,
       waterPrice,
+      garbageFee,
       extraFees: extraFees.filter((f) => f.label.trim()),
       defaultRent: rent,
       defaultDeposit: deposit,
@@ -78,6 +80,10 @@ export function RoomFormSheet({
           </Field>
         </div>
 
+        <Field label="Tiền rác / tháng" hint="Khoản cố định, tự cộng vào mỗi phiếu tháng. Để 0 nếu không thu.">
+          <MoneyInput value={garbageFee} onChange={setGarbageFee} />
+        </Field>
+
         <div className="field">
           <label>Khoản cố định hàng tháng</label>
           <div className="stack tight">
@@ -91,7 +97,7 @@ export function RoomFormSheet({
                         prev.map((f, i) => (i === index ? { ...f, label: value } : f)),
                       )
                     }
-                    placeholder="Tiền rác"
+                    placeholder="Phí mạng, giữ xe..."
                   />
                 </div>
                 <div style={{ width: 130 }}>
@@ -119,7 +125,7 @@ export function RoomFormSheet({
               + Thêm khoản cố định
             </button>
           </div>
-          <div className="hint">Để trống nếu bạn chỉ thu tiền phòng, điện và nước.</div>
+          <div className="hint">Để trống nếu bạn chỉ thu tiền phòng, điện, nước và rác.</div>
         </div>
 
         <Field label="Ghi chú">

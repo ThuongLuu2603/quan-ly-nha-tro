@@ -184,6 +184,12 @@ export function RoomDetailPage() {
             <span className="muted small">Giá nước</span>
             <span className="num">{formatMoney(room.waterPrice)} đ / m³</span>
           </div>
+          {(room.garbageFee ?? 0) > 0 && (
+            <div className="row between">
+              <span className="muted small">Tiền rác</span>
+              <span className="num">{formatMoney(room.garbageFee)} đ / tháng</span>
+            </div>
+          )}
           {room.extraFees.map((fee) => (
             <div className="row between" key={fee.id}>
               <span className="muted small">{fee.label}</span>
