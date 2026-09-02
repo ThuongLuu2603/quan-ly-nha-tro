@@ -627,6 +627,13 @@ textarea.input {
   border-bottom: none;
 }
 
+.meter-total {
+  border-top: 2px solid var(--border);
+  border-bottom: none;
+  margin-top: 4px;
+  padding-top: 14px;
+}
+
 .meter-row .input {
   min-height: 42px;
   padding: 8px 10px;
