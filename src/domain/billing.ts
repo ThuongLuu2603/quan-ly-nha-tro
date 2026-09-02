@@ -181,7 +181,7 @@ export function buildMonthlyInvoice(input: {
     } else {
       const reading = readings.get(utilityPeriod)
       if (!reading) {
-        warnings.push(`Chưa nhập chỉ số ${dt.formatPeriod(utilityPeriod)} cho phòng ${room.name}.`)
+        warnings.push(`Chưa chốt số cuối ${dt.formatPeriod(utilityPeriod)} cho phòng ${room.name}.`)
       } else {
         const base = baselineFor(tenancy, readings, utilityPeriod)
         const label = `${dt.formatPeriod(utilityPeriod)} (${dt.formatPeriodRange(utilityPeriod)})`

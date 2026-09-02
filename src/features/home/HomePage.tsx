@@ -109,7 +109,7 @@ export function HomePage() {
 
       {missingReadings.length > 0 && (
         <Banner tone="warn">
-          Còn {missingReadings.length} phòng chưa có chỉ số {dt.formatPeriod(utilityPeriod)}:{' '}
+          Còn {missingReadings.length} phòng chưa {dt.formatPeriodMeterClose(utilityPeriod)}:{' '}
           {missingReadings.map((r) => r.name).join(', ')}.{' '}
           <Link to="/chi-so" style={{ color: 'inherit', fontWeight: 700 }}>
             Nhập ngay

@@ -126,6 +126,17 @@ export function formatPeriod(period: Period): string {
   return `tháng ${pad(month)}/${year}`
 }
 
+/** So dong ho cuoi thang — dung tren man nhap chi so, tranh nham voi chi so ban giao. */
+export function formatPeriodMeterClose(period: Period): string {
+  const { year, month } = periodParts(period)
+  return `chốt cuối tháng ${pad(month)}/${year}`
+}
+
+export function formatPeriodShort(period: Period): string {
+  const { year, month } = periodParts(period)
+  return `T${pad(month)}/${year}`
+}
+
 export function formatPeriodRange(period: Period): string {
   const { start, end } = periodBounds(period)
   return `${formatDateShort(start)} – ${formatDateShort(end)}`

@@ -32,6 +32,14 @@ function baselineOf(data: Dataset, room: Room, period: Period): { electric: numb
   return { electric: tenancy.electricStart, water: tenancy.waterStart }
 }
 
+function baselineLabel(data: Dataset, room: Room, period: Period): string {
+  const tenancy = activeTenancy(data, room.id)
+  if (!tenancy) return 'đầu kỳ'
+  const prev = readingOf(data, room.id, dt.prevPeriod(period))
+  if (!prev || dt.periodOf(tenancy.startDate) >= period) return 'bàn giao'
+  return `cuối ${dt.formatPeriodShort(dt.prevPeriod(period))}`
+}
+
 function averageUsage(data: Dataset, roomId: ID, before: Period): number | null {
   const readings = readingsOfRoom(data, roomId).filter((r) => r.period < before)
   if (readings.length < 2) return null
@@ -91,7 +99,16 @@ export function MeterPage() {
   const missing = rooms.filter((room) => !readingOf(data, room.id, period)).length
 
   return (
-    <Page title="Nhập chỉ số" subtitle={`Kỳ ${dt.formatPeriod(period)} · ${dt.formatPeriodRange(period)}`}>
+    <Page
+      title="Nhập chỉ số"
+      subtitle={`${dt.formatPeriodMeterClose(period)} · ${dt.formatPeriodRange(period)}`}
+    >
+      <Banner tone="info">
+        Mỗi tháng chỉ nhập <strong>số đồng hồ cuối tháng</strong> (đọc khoảng ngày 30–31 hoặc đúng mốc
+        phát phiếu). Số <strong>bàn giao</strong> lúc nhận phòng không nhập ở đây — app tự lấy làm điểm
+        đầu tháng đầu tiên.
+      </Banner>
+
       <div className="chip-row">
         {periods.map((p) => (
           <button
@@ -99,7 +116,7 @@ export function MeterPage() {
             className={p === period ? 'chip active' : 'chip'}
             onClick={() => setPeriod(p)}
           >
-            {dt.formatPeriod(p)}
+            {dt.formatPeriodShort(p)}
           </button>
         ))}
       </div>
@@ -113,7 +130,7 @@ export function MeterPage() {
         <>
           {missing > 0 && (
             <Banner tone="info">
-              Còn {missing} phòng chưa nhập chỉ số {dt.formatPeriod(period)}. Nhập xong một lần là dùng
+              Còn {missing} phòng chưa {dt.formatPeriodMeterClose(period)}. Nhập xong một lần là dùng
               được cho mọi phòng, kể cả phòng có mốc phát phiếu khác nhau.
             </Banner>
           )}
@@ -147,7 +164,7 @@ export function MeterPage() {
                       <div>
                         <div className="strong">{room.name}</div>
                         <div className="tiny muted">
-                          cũ {base?.electric ?? 0} · {base?.water ?? 0}
+                          {baselineLabel(data, room, period)} {base?.electric ?? 0} · {base?.water ?? 0}
                         </div>
                       </div>
                       <NumberInput

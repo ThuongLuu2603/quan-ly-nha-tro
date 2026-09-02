@@ -101,7 +101,7 @@ export function IssuePage() {
             </div>
             <div className="tiny muted">
               {roomCollectsMeteredUtilities(item.room)
-                ? `Điện nước ${dt.formatPeriod(item.preview.utilityPeriod)}`
+                ? `Điện nước ${dt.formatPeriodMeterClose(item.preview.utilityPeriod)}`
                 : 'Chỉ thu tiền nhà'}
             </div>
             {item.preview.warnings.map((w) => (
