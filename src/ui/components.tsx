@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type FocusEvent, type ReactNode } from 'react'
 import { formatMoney, formatNumber, parseMoneyInput, parseNumberInput } from '../domain/money'
+import { EmptyIcon, type EmptyIconKind } from './icons'
 
 export function Card({
   title,
@@ -270,10 +271,20 @@ export function Sheet({
   )
 }
 
-export function EmptyState({ icon, text, action }: { icon: string; text: string; action?: ReactNode }) {
+export function EmptyState({
+  icon,
+  text,
+  action,
+}: {
+  icon: EmptyIconKind
+  text: string
+  action?: ReactNode
+}) {
   return (
     <div className="empty">
-      <div className="big">{icon}</div>
+      <div className="big">
+        <EmptyIcon kind={icon} />
+      </div>
       <div>{text}</div>
       {action && <div style={{ marginTop: 14 }}>{action}</div>}
     </div>

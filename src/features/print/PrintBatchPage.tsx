@@ -178,7 +178,7 @@ export function PrintBatchPage() {
       </div>
 
       {invoices.length === 0 ? (
-        <EmptyState icon="🖨" text="Không có phiếu nào khớp bộ lọc." />
+        <EmptyState icon="print" text="Không có phiếu nào khớp bộ lọc." />
       ) : (
         <Card flush title="Chọn phiếu">
           {invoices.map((invoice) => {

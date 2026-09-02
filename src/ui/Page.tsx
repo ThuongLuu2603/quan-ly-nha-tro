@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { IconBack } from './icons'
 
 export function Page({
   title,
@@ -25,7 +26,7 @@ export function Page({
             aria-label="Quay lại"
             onClick={() => (typeof back === 'string' ? navigate(back) : navigate(-1))}
           >
-            ‹
+            <IconBack />
           </button>
         )}
         <h1>

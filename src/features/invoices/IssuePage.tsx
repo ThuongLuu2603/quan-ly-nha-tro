@@ -136,7 +136,7 @@ export function IssuePage() {
   return (
     <Page title="Phát phiếu" back="/phieu" subtitle={`Hôm nay ${dt.formatDate(now)}`}>
       {candidates.length === 0 ? (
-        <EmptyState icon="🧾" text="Chưa có phòng nào đang có khách để phát phiếu." />
+        <EmptyState icon="invoice" text="Chưa có phòng nào đang có khách để phát phiếu." />
       ) : (
         <>
           <Banner tone="info">

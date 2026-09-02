@@ -69,7 +69,7 @@ export function InvoiceDetailPage() {
   if (!invoice || !room) {
     return (
       <Page title="Phiếu" back="/phieu">
-        <EmptyState icon="🔍" text="Không tìm thấy phiếu này." />
+        <EmptyState icon="search" text="Không tìm thấy phiếu này." />
       </Page>
     )
   }

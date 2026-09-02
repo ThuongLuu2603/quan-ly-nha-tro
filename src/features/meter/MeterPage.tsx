@@ -293,7 +293,7 @@ export function MeterPage() {
 
         <EmptyState
 
-          icon="⏱"
+          icon="meter"
 
           text="Không có phòng trọ nào cần nhập điện nước (phòng chỉ thu tiền nhà sẽ không hiện ở đây)."
 

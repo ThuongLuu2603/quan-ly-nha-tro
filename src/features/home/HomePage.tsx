@@ -88,7 +88,7 @@ export function HomePage() {
     return (
       <Page title="Quản lý nhà trọ">
         <EmptyState
-          icon="🏠"
+          icon="rooms"
           text="Bắt đầu bằng cách khai báo các phòng trọ của bạn."
           action={
             <Link className="btn primary" to="/phong">
@@ -194,11 +194,11 @@ export function HomePage() {
         </div>
       </Card>
 
-      <div className="row" style={{ gap: 10 }}>
-        <Link className="btn grow" to="/chi-so">
+      <div className="home-actions">
+        <Link className="btn" to="/chi-so">
           Nhập điện nước
         </Link>
-        <Link className="btn primary grow" to="/phat-phieu">
+        <Link className="btn primary" to="/phat-phieu">
           Phát phiếu
         </Link>
       </div>

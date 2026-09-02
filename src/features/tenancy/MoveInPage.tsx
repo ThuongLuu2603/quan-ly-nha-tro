@@ -94,7 +94,7 @@ export function MoveInPage() {
 
       <Page title="Nhận phòng" back="/phong">
 
-        <EmptyState icon="🔍" text="Không tìm thấy phòng này." />
+        <EmptyState icon="search" text="Không tìm thấy phòng này." />
 
       </Page>
 

@@ -112,7 +112,7 @@ export function InvoiceListPage() {
 
       {invoices.length === 0 ? (
         <EmptyState
-          icon="🧾"
+          icon="invoice"
           text={
             hasActiveFilters
               ? 'Không có phiếu nào khớp bộ lọc.'

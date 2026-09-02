@@ -52,7 +52,7 @@ export function CheckoutPage() {
   if (!room) {
     return (
       <Page title="Trả phòng" back="/phong">
-        <EmptyState icon="🔍" text="Không tìm thấy phòng này." />
+        <EmptyState icon="search" text="Không tìm thấy phòng này." />
       </Page>
     )
   }

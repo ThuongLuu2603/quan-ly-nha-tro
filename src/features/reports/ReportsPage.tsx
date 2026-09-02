@@ -119,7 +119,7 @@ export function ReportsPage() {
   if (data.invoices.length === 0) {
     return (
       <Page title="Báo cáo" back="/">
-        <EmptyState icon="📊" text="Chưa có phiếu nào để thống kê." />
+        <EmptyState icon="report" text="Chưa có phiếu nào để thống kê." />
       </Page>
     )
   }
