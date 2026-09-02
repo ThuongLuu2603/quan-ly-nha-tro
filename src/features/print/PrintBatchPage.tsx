@@ -17,6 +17,20 @@ import { Page } from '../../ui/Page'
 
 type MonthFilter = Period | 'all'
 
+function compareInvoicesForPrint(
+  a: { roomId: string; issueDate: string },
+  b: { roomId: string; issueDate: string },
+  roomById: Map<string, { order: number; name: string }>,
+): number {
+  const ra = roomById.get(a.roomId)
+  const rb = roomById.get(b.roomId)
+  const orderDiff = (ra?.order ?? 0) - (rb?.order ?? 0)
+  if (orderDiff !== 0) return orderDiff
+  const nameDiff = (ra?.name ?? '').localeCompare(rb?.name ?? '', 'vi', { numeric: true })
+  if (nameDiff !== 0) return nameDiff
+  return a.issueDate.localeCompare(b.issueDate)
+}
+
 export function PrintBatchPage() {
   const data = useDataset()
   const { toast, toastNode } = useToast()
@@ -28,6 +42,20 @@ export function PrintBatchPage() {
   const pageBlobsRef = useRef<Blob[]>([])
 
   const roomName = useMemo(() => new Map(data.rooms.map((r) => [r.id, r.name])), [data.rooms])
+  const roomById = useMemo(
+    () => new Map(data.rooms.map((r) => [r.id, { order: r.order, name: r.name }])),
+    [data.rooms],
+  )
+
+  const selectedInvoices = useMemo(() => {
+    return data.invoices
+      .filter((invoice) => selected.has(invoice.id))
+      .sort((a, b) => compareInvoicesForPrint(a, b, roomById))
+  }, [data.invoices, roomById, selected])
+
+  const printSlotOf = useMemo(() => {
+    return new Map(selectedInvoices.map((invoice, index) => [invoice.id, index + 1]))
+  }, [selectedInvoices])
 
   const availableMonths = useMemo(() => {
     const periods = new Set(data.invoices.map((invoice) => dt.periodOf(invoice.issueDate)))
@@ -43,8 +71,8 @@ export function PrintBatchPage() {
         if (query && !label.includes(query)) return false
         return true
       })
-      .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || a.roomId.localeCompare(b.roomId))
-  }, [data.invoices, monthFilter, roomName, search])
+      .sort((a, b) => compareInvoicesForPrint(a, b, roomById))
+  }, [data.invoices, monthFilter, roomById, roomName, search])
 
   useEffect(() => {
     return () => {
@@ -81,7 +109,7 @@ export function PrintBatchPage() {
     clearPreview()
 
     try {
-      const ordered = invoices.filter((i) => selected.has(i.id))
+      const ordered = selectedInvoices
       const receiptBlobs: Blob[] = []
 
       for (const invoice of ordered) {
@@ -111,13 +139,15 @@ export function PrintBatchPage() {
     }
   }
 
-  const pageCount = Math.ceil(selected.size / RECEIPTS_PER_A4_PAGE)
+  const pageCount = Math.ceil(selectedInvoices.length / RECEIPTS_PER_A4_PAGE)
+  const visibleSelectedCount = invoices.filter((invoice) => selected.has(invoice.id)).length
 
   return (
     <Page title="In phiếu A4" back="/cai-dat">
       <Banner tone="info">
         Mỗi tờ A4 xếp <strong>4 phiếu</strong> (khổ ~A6): trên-trái → trên-phải → dưới-trái → dưới-phải.
-        Chọn phiếu theo thứ tự in, rồi bấm <strong>Dựng bản in</strong> → <strong>In ngay</strong>.
+        Phiếu được <strong>sắp theo thứ tự phòng</strong> (kéo thả ở màn Phòng). Bấm{' '}
+        <strong>Dựng bản in</strong> → <strong>In ngay</strong>.
       </Banner>
 
       <TextInput value={search} onChange={setSearch} placeholder="Lọc theo tên phòng…" />
@@ -145,6 +175,12 @@ export function PrintBatchPage() {
       <div className="row between" style={{ margin: '12px 0', gap: 8 }}>
         <span className="small muted">
           Đã chọn <strong>{selected.size}</strong>
+          {visibleSelectedCount < selected.size && (
+            <span>
+              {' '}
+              ({visibleSelectedCount} hiển thị · vẫn in đủ {selected.size})
+            </span>
+          )}
           {selected.size > 0 && (
             <span>
               {' '}
@@ -166,6 +202,7 @@ export function PrintBatchPage() {
             const absorbedBy = invoiceAbsorbedBy(data, invoice)
             const checked = selected.has(invoice.id)
             const remaining = outstandingOf(invoice)
+            const slot = printSlotOf.get(invoice.id)
 
             return (
               <button
@@ -178,6 +215,7 @@ export function PrintBatchPage() {
                 <div className="row between">
                   <div className="grow">
                     <div className="row" style={{ gap: 8 }}>
+                      {slot != null && <Pill tone="ok">#{slot}</Pill>}
                       <span className="strong">{room}</span>
                       <Pill tone="muted">{dt.formatDate(invoice.issueDate)}</Pill>
                       {checked && <Pill tone="ok">Chọn</Pill>}
