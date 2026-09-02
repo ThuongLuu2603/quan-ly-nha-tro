@@ -3,6 +3,7 @@ import { invoiceStatusLabel, invoiceAbsorbedBy } from '../../data/selectors'
 import { useDataset } from '../../data/store'
 import { outstandingOf } from '../../domain/billing'
 import * as dt from '../../domain/dates'
+import { compareRooms } from '../../domain/roomOrder'
 import { formatMoney } from '../../domain/money'
 import type { ID, Period } from '../../domain/types'
 import { buildReceiptBlob } from '../../receipt/buildReceiptBlob'
@@ -17,20 +18,6 @@ import { Page } from '../../ui/Page'
 
 type MonthFilter = Period | 'all'
 
-function compareInvoicesForPrint(
-  a: { roomId: string; issueDate: string },
-  b: { roomId: string; issueDate: string },
-  roomById: Map<string, { order: number; name: string }>,
-): number {
-  const ra = roomById.get(a.roomId)
-  const rb = roomById.get(b.roomId)
-  const orderDiff = (ra?.order ?? 0) - (rb?.order ?? 0)
-  if (orderDiff !== 0) return orderDiff
-  const nameDiff = (ra?.name ?? '').localeCompare(rb?.name ?? '', 'vi', { numeric: true })
-  if (nameDiff !== 0) return nameDiff
-  return a.issueDate.localeCompare(b.issueDate)
-}
-
 export function PrintBatchPage() {
   const data = useDataset()
   const { toast, toastNode } = useToast()
@@ -42,15 +29,26 @@ export function PrintBatchPage() {
   const pageBlobsRef = useRef<Blob[]>([])
 
   const roomName = useMemo(() => new Map(data.rooms.map((r) => [r.id, r.name])), [data.rooms])
-  const roomById = useMemo(
-    () => new Map(data.rooms.map((r) => [r.id, { order: r.order, name: r.name }])),
-    [data.rooms],
-  )
+  const roomById = useMemo(() => new Map(data.rooms.map((r) => [r.id, r])), [data.rooms])
+
+  const compareInvoicesForPrint = (
+    a: { roomId: string; issueDate: string },
+    b: { roomId: string; issueDate: string },
+  ) => {
+    const ra = roomById.get(a.roomId)
+    const rb = roomById.get(b.roomId)
+    const roomCmp = compareRooms(
+      { order: ra?.order ?? 0, name: ra?.name ?? '' },
+      { order: rb?.order ?? 0, name: rb?.name ?? '' },
+    )
+    if (roomCmp !== 0) return roomCmp
+    return a.issueDate.localeCompare(b.issueDate)
+  }
 
   const selectedInvoices = useMemo(() => {
     return data.invoices
       .filter((invoice) => selected.has(invoice.id))
-      .sort((a, b) => compareInvoicesForPrint(a, b, roomById))
+      .sort((a, b) => compareInvoicesForPrint(a, b))
   }, [data.invoices, roomById, selected])
 
   const printSlotOf = useMemo(() => {
@@ -71,7 +69,7 @@ export function PrintBatchPage() {
         if (query && !label.includes(query)) return false
         return true
       })
-      .sort((a, b) => compareInvoicesForPrint(a, b, roomById))
+      .sort((a, b) => compareInvoicesForPrint(a, b))
   }, [data.invoices, monthFilter, roomById, roomName, search])
 
   useEffect(() => {

@@ -10,6 +10,7 @@ import {
 import { useDataset } from '../../data/store'
 import { cashPaidAmount, outstandingOf, ownTotal, roomCollectsMeteredUtilities } from '../../domain/billing'
 import * as dt from '../../domain/dates'
+import { compareRooms } from '../../domain/roomOrder'
 import { formatMoney } from '../../domain/money'
 import { Banner, Card, EmptyState, Pill } from '../../ui/components'
 import { Page } from '../../ui/Page'
@@ -46,7 +47,7 @@ export function HomePage() {
       })
       .filter((item): item is NonNullable<typeof item> => item !== null)
       .filter((item) => dt.periodOf(item.issueDate) === thisPeriod)
-      .sort((a, b) => a.issueDate.localeCompare(b.issueDate) || a.room.name.localeCompare(b.room.name, 'vi'))
+      .sort((a, b) => a.issueDate.localeCompare(b.issueDate) || compareRooms(a.room, b.room))
   }, [data, now, thisPeriod])
 
   const missingReadings = useMemo(() => {
@@ -79,7 +80,7 @@ export function HomePage() {
       return { room, unpaid }
     })
     .filter((item) => item.unpaid > 0)
-    .sort((a, b) => b.unpaid - a.unpaid)
+    .sort((a, b) => compareRooms(a.room, b.room))
 
   if (data.rooms.length === 0) {
     return (
