@@ -17,6 +17,7 @@ export function IssuePage() {
   const [selected, setSelected] = useState<Set<ID>>(new Set())
   const [busy, setBusy] = useState(false)
   const now = dt.today()
+  const thisPeriod = dt.periodOf(now)
 
   const candidates = useMemo(() => {
     return data.rooms
@@ -38,7 +39,10 @@ export function IssuePage() {
   }, [data, now])
 
   const due = candidates.filter((c) => c.issueDate <= now)
-  const nextByRoom = candidates.filter((c) => c.issueDate > now)
+  const earlyInMonth = candidates.filter(
+    (c) => c.issueDate > now && dt.periodOf(c.issueDate) === thisPeriod,
+  )
+  const issuable = [...due, ...earlyInMonth]
 
   const toggle = (roomId: ID) => {
     setSelected((prev) => {
@@ -54,7 +58,7 @@ export function IssuePage() {
     setBusy(true)
     let count = 0
     let lastId: ID | null = null
-    for (const item of due) {
+    for (const item of issuable) {
       if (!selected.has(item.room.id)) continue
       lastId = await issueMonthlyInvoice({
         data,
@@ -73,8 +77,9 @@ export function IssuePage() {
     }
   }
 
-  const renderItem = (item: (typeof candidates)[number]) => {
+  const renderItem = (item: (typeof candidates)[number], options?: { early?: boolean }) => {
     const checked = selected.has(item.room.id)
+    const early = options?.early ?? false
     const rentLine = item.preview.rentFrom
       ? `Tiền phòng ${dt.formatDateShort(item.preview.rentFrom)} – ${dt.formatDateShort(item.preview.rentTo!)}`
       : `Tiền phòng đã đóng tới ${dt.formatDate(item.preview.rentPaidThrough!)}`
@@ -93,6 +98,7 @@ export function IssuePage() {
                 {item.room.name}
               </span>
               <Pill tone="accent">{dt.formatDate(item.issueDate)}</Pill>
+              {early && <Pill tone="muted">phát sớm</Pill>}
               {checked && <Pill tone="ok">Đã chọn</Pill>}
             </div>
             <div className="tiny muted" style={{ marginTop: 4 }}>
@@ -130,19 +136,24 @@ export function IssuePage() {
       ) : (
         <>
           <Banner tone="info">
-            Phiếu phát trong tháng nào thì lấy điện nước của tháng liền trước. Tiền phòng chỉ được tính
-            khi tới mốc, nên khách đã đóng trước sẽ không bị thu lần hai.
+            Phiếu phát trong tháng nào thì lấy điện nước của tháng liền trước. Có thể{' '}
+            <strong>phát sớm</strong> trước mốc ngày nếu vẫn trong tháng. Tiền phòng chỉ tính khi tới
+            mốc trên phiếu — khách đã đóng trước sẽ không bị thu lần hai.
           </Banner>
 
           <Card title={`Tới mốc phát phiếu (${due.length})`} flush>
             {due.length === 0 ? (
               <div className="muted small" style={{ padding: '0 16px 16px' }}>
                 Hôm nay chưa phòng nào tới mốc.
-                {nextByRoom.length > 0 && (
+                {earlyInMonth.length > 0 && (
+                  <> Có thể phát sớm {earlyInMonth.length} phòng trong tháng bên dưới.</>
+                )}
+                {earlyInMonth.length === 0 && candidates.length > 0 && (
                   <>
                     {' '}
                     Mốc gần nhất:{' '}
-                    {nextByRoom
+                    {candidates
+                      .filter((c) => c.issueDate > now)
                       .slice(0, 3)
                       .map((item) => `${item.room.name} (${dt.formatDate(item.issueDate)})`)
                       .join(' · ')}
@@ -151,9 +162,15 @@ export function IssuePage() {
                 )}
               </div>
             ) : (
-              due.map(renderItem)
+              due.map((item) => renderItem(item))
             )}
           </Card>
+
+          {earlyInMonth.length > 0 && (
+            <Card title={`Phát sớm trong ${dt.formatPeriod(thisPeriod)} (${earlyInMonth.length})`} flush>
+              {earlyInMonth.map((item) => renderItem(item, { early: true }))}
+            </Card>
+          )}
 
           <button
             className="btn primary block"

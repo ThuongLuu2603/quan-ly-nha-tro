@@ -45,9 +45,9 @@ export function HomePage() {
         }
       })
       .filter((item): item is NonNullable<typeof item> => item !== null)
-      .filter((item) => item.daysAway <= 7)
-      .sort((a, b) => a.issueDate.localeCompare(b.issueDate))
-  }, [data, now])
+      .filter((item) => dt.periodOf(item.issueDate) === thisPeriod)
+      .sort((a, b) => a.issueDate.localeCompare(b.issueDate) || a.room.name.localeCompare(b.room.name, 'vi'))
+  }, [data, now, thisPeriod])
 
   const missingReadings = useMemo(() => {
     return data.rooms.flatMap((room) => {
@@ -137,10 +137,10 @@ export function HomePage() {
         </Banner>
       )}
 
-      <Card title="Lịch phát phiếu 7 ngày tới" flush>
+      <Card title={`Lịch phát phiếu ${dt.formatPeriod(thisPeriod)}`} flush>
         {schedule.length === 0 ? (
           <div className="muted small" style={{ padding: '0 16px 16px' }}>
-            Không có phòng nào tới mốc trong tuần này.
+            Không còn mốc phát phiếu nào trong tháng này (các phòng đã phát hoặc mốc sang tháng sau).
           </div>
         ) : (
           schedule.map((item) => (
@@ -152,7 +152,10 @@ export function HomePage() {
                     {item.daysAway <= 0 ? (
                       <Pill tone="danger">Tới mốc</Pill>
                     ) : (
-                      <Pill tone="muted">còn {item.daysAway} ngày</Pill>
+                      <>
+                        <Pill tone="muted">còn {item.daysAway} ngày</Pill>
+                        <Pill tone="accent">phát sớm được</Pill>
+                      </>
                     )}
                   </div>
                   <div className="tiny muted" style={{ marginTop: 3 }}>
