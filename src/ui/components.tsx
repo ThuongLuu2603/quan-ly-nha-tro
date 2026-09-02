@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { formatMoney, parseMoneyInput } from '../domain/money'
+import { formatMoney, formatNumber, parseMoneyInput, parseNumberInput } from '../domain/money'
 
 export function Card({
   title,
@@ -160,15 +160,31 @@ export function NumberInput({
   placeholder?: string
   invalid?: boolean
 }) {
+  const [text, setText] = useState(() => (value === null ? '' : formatNumber(value)))
+  const typing = useRef(false)
+
+  useEffect(() => {
+    if (typing.current) return
+    setText(value === null ? '' : formatNumber(value))
+  }, [value])
+
   return (
     <input
       className={invalid ? 'input align-right invalid' : 'input align-right'}
       inputMode="decimal"
-      value={value === null ? '' : String(value)}
-      placeholder={placeholder}
+      value={text}
+      placeholder={placeholder ?? '0'}
+      onFocus={() => {
+        typing.current = true
+      }}
+      onBlur={() => {
+        typing.current = false
+        setText(value === null ? '' : formatNumber(value))
+      }}
       onChange={(e) => {
-        const raw = e.target.value.replace(/[^\d.]/g, '')
-        onChange(raw === '' ? null : Number(raw))
+        const parsed = parseNumberInput(e.target.value)
+        setText(parsed === null ? '' : formatNumber(parsed))
+        onChange(parsed)
       }}
     />
   )

@@ -18,6 +18,16 @@ export function parseMoneyInput(raw: string): number {
   return Number(digits)
 }
 
+/** Chi so cong to / so nguyen co dau cham phan cach nghin. */
+export function parseNumberInput(raw: string): number | null {
+  const normalized = raw.trim().replace(/\./g, '').replace(/,/g, '.')
+  if (!normalized) return null
+  const cleaned = normalized.replace(/[^\d.]/g, '')
+  if (!cleaned) return null
+  const n = Number(cleaned)
+  return Number.isFinite(n) ? n : null
+}
+
 const UNITS = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín']
 
 function readTriple(n: number, forceHundred: boolean): string {
