@@ -85,6 +85,15 @@ export async function saveRoom(room: Room): Promise<void> {
   await db.rooms.put(room)
 }
 
+export async function reorderRooms(orderedIds: ID[]): Promise<void> {
+  await db.transaction('rw', db.rooms, async () => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      const room = await db.rooms.get(orderedIds[i])
+      if (room) await db.rooms.put({ ...room, order: i + 1 })
+    }
+  })
+}
+
 export async function createRoom(input: Omit<Room, 'id' | 'order'> & { order?: number }): Promise<ID> {
   const count = await db.rooms.count()
   const room: Room = { ...input, id: newId(), order: input.order ?? count + 1 }
