@@ -10,6 +10,8 @@ type StatusListener = (status: SyncStatus, detail?: string) => void
 let syncing = false
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 const listeners = new Set<StatusListener>()
+let realtimeUserId: string | null = null
+let realtimeTeardown: (() => void) | null = null
 
 export function onSyncStatus(listener: StatusListener): () => void {
   listeners.add(listener)
@@ -201,6 +203,14 @@ export async function subscribeRealtime(userId: string): Promise<() => void> {
   const supabase = getSupabase()
   if (!supabase) return () => undefined
 
+  if (realtimeUserId === userId && realtimeTeardown) {
+    return realtimeTeardown
+  }
+
+  realtimeTeardown?.()
+  realtimeTeardown = null
+  realtimeUserId = null
+
   const channel = supabase
     .channel(`sync:${userId}`)
     .on(
@@ -217,7 +227,21 @@ export async function subscribeRealtime(userId: string): Promise<() => void> {
     )
     .subscribe()
 
-  return () => {
+  const teardown = () => {
     void supabase.removeChannel(channel)
+    if (realtimeTeardown === teardown) {
+      realtimeTeardown = null
+      realtimeUserId = null
+    }
   }
+
+  realtimeUserId = userId
+  realtimeTeardown = teardown
+  return teardown
+}
+
+export function unsubscribeRealtime(): void {
+  realtimeTeardown?.()
+  realtimeTeardown = null
+  realtimeUserId = null
 }

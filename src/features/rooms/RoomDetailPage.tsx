@@ -28,20 +28,10 @@ export function RoomDetailPage() {
   const [tenantSheet, setTenantSheet] = useState<{ tenant?: Tenant } | null>(null)
 
   const room = data.rooms.find((r) => r.id === roomId)
-  if (!room) {
-    return (
-      <Page title="Phòng" back="/phong">
-        <EmptyState icon="🔍" text="Không tìm thấy phòng này." />
-      </Page>
-    )
-  }
-
-  const tenancy = activeTenancy(data, room.id)
-  const tenants = tenantsOf(data, tenancy?.id)
-  const invoices = invoicesOfRoom(data, room.id)
+  const tenancy = room ? activeTenancy(data, room.id) : undefined
 
   const meterHistory = useMemo(() => {
-    if (!tenancy || !roomCollectsMeteredUtilities(room)) return []
+    if (!room || !tenancy || !roomCollectsMeteredUtilities(room)) return []
     const startPeriod = dt.periodOf(tenancy.startDate)
     return readingsOfRoom(data, room.id)
       .filter((r) => r.period >= startPeriod)
@@ -59,7 +49,18 @@ export function RoomDetailPage() {
           invoiceMonth: dt.invoiceMonthForUtilityPeriod(reading.period),
         }
       })
-  }, [data, room.id, tenancy])
+  }, [data, room, tenancy])
+
+  if (!room) {
+    return (
+      <Page title="Phòng" back="/phong">
+        <EmptyState icon="🔍" text="Không tìm thấy phòng này." />
+      </Page>
+    )
+  }
+
+  const tenants = tenantsOf(data, tenancy?.id)
+  const invoices = invoicesOfRoom(data, room.id)
 
   return (
     <Page title={`Phòng ${room.name}`} back="/phong" subtitle={room.note}>

@@ -15,6 +15,7 @@ import {
   runSync,
   scheduleSync,
   subscribeRealtime,
+  unsubscribeRealtime,
 } from './engine'
 import {
   authRedirectUrl,
@@ -50,16 +51,11 @@ function bindAuthListeners(
     return () => undefined
   }
 
-  let unsubscribeRealtime: (() => void) | undefined
-
   void supabase.auth.getSession().then(({ data }) => {
     setSession(data.session)
     setLoading(false)
     if (data.session) {
       void maybeSeedCloud().then(() => runSync())
-      void subscribeRealtime(data.session.user.id).then((off) => {
-        unsubscribeRealtime = off
-      })
     }
   })
 
@@ -67,12 +63,9 @@ function bindAuthListeners(
     setSession(next)
     if (next) {
       void maybeSeedCloud().then(() => runSync())
-      void subscribeRealtime(next.user.id).then((off) => {
-        unsubscribeRealtime?.()
-        unsubscribeRealtime = off
-      })
+      void subscribeRealtime(next.user.id)
     } else {
-      unsubscribeRealtime?.()
+      unsubscribeRealtime()
     }
   })
 
@@ -82,7 +75,7 @@ function bindAuthListeners(
   return () => {
     sub.subscription.unsubscribe()
     window.removeEventListener('online', onOnline)
-    unsubscribeRealtime?.()
+    unsubscribeRealtime()
   }
 }
 
