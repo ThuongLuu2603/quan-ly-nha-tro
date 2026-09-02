@@ -25,11 +25,6 @@ export function SyncSetupPage() {
     <Page title="Bật đồng bộ" subtitle="Một lần duy nhất">
       <Card>
         <div className="stack tight">
-          <p className="small">
-            Tôi đã tạo sẵn kho online (Supabase project <strong>QLNT</strong>) và bảng lưu dữ liệu
-            cho anh. Anh chỉ cần bấm nút dưới — <strong>không cần copy key</strong>.
-          </p>
-
           <button className="btn primary block" onClick={connect}>
             {alreadyHasKeys ? 'Kết nối lại' : 'Bấm để bật đồng bộ'}
           </button>
