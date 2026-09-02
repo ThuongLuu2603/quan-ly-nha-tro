@@ -12,6 +12,8 @@ import * as dt from '../../domain/dates'
 
 import { roomCollectsMeteredUtilities } from '../../domain/billing'
 
+import { compareRooms } from '../../domain/roomOrder'
+
 import { formatMoney, formatNumber } from '../../domain/money'
 
 import type { ID, Period, Room } from '../../domain/types'
@@ -147,17 +149,11 @@ export function MeterPage() {
 
 
   const rooms = useMemo(
-
     () =>
-
-      data.rooms.filter(
-
-        (room) => roomCollectsMeteredUtilities(room) && activeTenancy(data, room.id),
-
-      ),
-
+      data.rooms
+        .filter((room) => roomCollectsMeteredUtilities(room) && activeTenancy(data, room.id))
+        .sort(compareRooms),
     [data],
-
   )
 
 

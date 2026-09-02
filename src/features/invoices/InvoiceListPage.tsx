@@ -4,6 +4,7 @@ import { invoiceStatusLabel, invoiceAbsorbedBy } from '../../data/selectors'
 import { useDataset } from '../../data/store'
 import { outstandingOf, statusOf, wasCarriedForward } from '../../domain/billing'
 import * as dt from '../../domain/dates'
+import { buildRoomById, compareInvoicesByRoom } from '../../domain/roomOrder'
 import type { Period } from '../../domain/types'
 import { formatMoney } from '../../domain/money'
 import { Card, EmptyState, Pill, TextInput } from '../../ui/components'
@@ -41,6 +42,7 @@ export function InvoiceListPage() {
     () => new Map(data.rooms.map((r) => [r.id, r.name])),
     [data.rooms],
   )
+  const roomById = useMemo(() => buildRoomById(data.rooms), [data.rooms])
 
   const availableMonths = useMemo(() => {
     const periods = new Set(data.invoices.map((invoice) => dt.periodOf(invoice.issueDate)))
@@ -58,8 +60,8 @@ export function InvoiceListPage() {
         if (filter === 'unsent') return !invoice.sentAt && !wasCarriedForward(invoice)
         return true
       })
-      .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.createdAt.localeCompare(a.createdAt))
-  }, [data.invoices, filter, monthFilter, roomName, search])
+      .sort((a, b) => compareInvoicesByRoom(a, b, roomById, 'desc'))
+  }, [data.invoices, filter, monthFilter, roomById, roomName, search])
 
   const hasActiveFilters = filter !== 'all' || monthFilter !== 'all' || search.trim().length > 0
 

@@ -11,7 +11,7 @@ import {
   type RevenueBreakdown,
 } from '../../domain/billing'
 import * as dt from '../../domain/dates'
-import { compareRooms } from '../../domain/roomOrder'
+import { buildRoomById, compareInvoicesByRoom } from '../../domain/roomOrder'
 import { formatMoney } from '../../domain/money'
 import { downloadBlob } from '../../receipt/share'
 import { Card, EmptyState } from '../../ui/components'
@@ -66,7 +66,7 @@ export function ReportsPage() {
   const [year, setYear] = useState(() => Number(dt.today().slice(0, 4)))
 
   const roomName = useMemo(() => new Map(data.rooms.map((r) => [r.id, r.name])), [data.rooms])
-  const roomById = useMemo(() => new Map(data.rooms.map((r) => [r.id, r])), [data.rooms])
+  const roomById = useMemo(() => buildRoomById(data.rooms), [data.rooms])
 
   const yearInvoices = useMemo(
     () => data.invoices.filter((i) => i.issueDate.startsWith(String(year))),
@@ -93,16 +93,7 @@ export function ReportsPage() {
   const debts = data.invoices
     .map((invoice) => ({ invoice, remaining: outstandingOf(invoice) }))
     .filter((item) => item.remaining > 0)
-    .sort((a, b) => {
-      const ra = roomById.get(a.invoice.roomId)
-      const rb = roomById.get(b.invoice.roomId)
-      const roomCmp = compareRooms(
-        { order: ra?.order ?? 0, name: ra?.name ?? '' },
-        { order: rb?.order ?? 0, name: rb?.name ?? '' },
-      )
-      if (roomCmp !== 0) return roomCmp
-      return a.invoice.issueDate.localeCompare(b.invoice.issueDate)
-    })
+    .sort((a, b) => compareInvoicesByRoom(a.invoice, b.invoice, roomById, 'desc'))
 
   const years = useMemo(() => {
     const set = new Set<number>([Number(dt.today().slice(0, 4))])

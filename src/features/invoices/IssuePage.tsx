@@ -5,6 +5,7 @@ import { activeTenancy, nextIssueDateFor, primaryTenant } from '../../data/selec
 import { useDataset } from '../../data/store'
 import { roomCollectsMeteredUtilities } from '../../domain/billing'
 import * as dt from '../../domain/dates'
+import { compareRoomItems } from '../../domain/roomOrder'
 import { formatMoney } from '../../domain/money'
 import type { ID } from '../../domain/types'
 import { Banner, Card, EmptyState, Pill, useToast } from '../../ui/components'
@@ -35,14 +36,17 @@ export function IssuePage() {
         }
       })
       .filter((item): item is NonNullable<typeof item> => item !== null)
-      .sort((a, b) => a.issueDate.localeCompare(b.issueDate) || a.room.name.localeCompare(b.room.name, 'vi'))
+      .sort(compareRoomItems)
   }, [data, now])
 
   const due = candidates.filter((c) => c.issueDate <= now)
   const earlyInMonth = candidates.filter(
     (c) => c.issueDate > now && dt.periodOf(c.issueDate) === thisPeriod,
   )
-  const issuable = [...due, ...earlyInMonth]
+  const issuable = useMemo(
+    () => [...due, ...earlyInMonth].sort(compareRoomItems),
+    [due, earlyInMonth],
+  )
 
   const toggle = (roomId: ID) => {
     setSelected((prev) => {

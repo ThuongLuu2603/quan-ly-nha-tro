@@ -10,7 +10,7 @@ import {
 import { useDataset } from '../../data/store'
 import { cashPaidAmount, outstandingOf, ownTotal, roomCollectsMeteredUtilities } from '../../domain/billing'
 import * as dt from '../../domain/dates'
-import { compareRooms } from '../../domain/roomOrder'
+import { compareRoomItems, compareRoomItemsByIssueDate, compareRooms } from '../../domain/roomOrder'
 import { formatMoney } from '../../domain/money'
 import { Banner, Card, EmptyState, Pill } from '../../ui/components'
 import { Page } from '../../ui/Page'
@@ -47,26 +47,28 @@ export function HomePage() {
       })
       .filter((item): item is NonNullable<typeof item> => item !== null)
       .filter((item) => dt.periodOf(item.issueDate) === thisPeriod)
-      .sort((a, b) => a.issueDate.localeCompare(b.issueDate) || compareRooms(a.room, b.room))
+      .sort(compareRoomItemsByIssueDate)
   }, [data, now, thisPeriod])
 
   const missingReadings = useMemo(() => {
-    return data.rooms.flatMap((room) => {
-      if (!roomCollectsMeteredUtilities(room)) return []
-      const tenancy = activeTenancy(data, room.id)
-      if (!tenancy) return []
-      const issueDate = nextIssueDateFor(data, tenancy, now)
-      if (dt.diffDays(now, issueDate) > 14) return []
-      const utilityPeriod = dt.prevPeriod(dt.periodOf(issueDate))
-      if (readingOf(data, room.id, utilityPeriod)) return []
-      return [
-        {
-          room,
-          issueDate,
-          invoiceMonth: dt.periodOf(issueDate),
-        },
-      ]
-    })
+    return data.rooms
+      .flatMap((room) => {
+        if (!roomCollectsMeteredUtilities(room)) return []
+        const tenancy = activeTenancy(data, room.id)
+        if (!tenancy) return []
+        const issueDate = nextIssueDateFor(data, tenancy, now)
+        if (dt.diffDays(now, issueDate) > 14) return []
+        const utilityPeriod = dt.prevPeriod(dt.periodOf(issueDate))
+        if (readingOf(data, room.id, utilityPeriod)) return []
+        return [
+          {
+            room,
+            issueDate,
+            invoiceMonth: dt.periodOf(issueDate),
+          },
+        ]
+      })
+      .sort(compareRoomItems)
   }, [data, now])
 
   const debtors = data.rooms

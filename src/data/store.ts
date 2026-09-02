@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
+import { compareInvoicesByRoom, compareRooms, buildRoomById } from '../domain/roomOrder'
 import type { Invoice, Reading, Room, Settings, Tenancy, Tenant } from '../domain/types'
 import { DEFAULT_SETTINGS, db } from './db'
 
@@ -32,8 +33,9 @@ export function useDataset(): Dataset {
       db.invoices.toArray(),
       db.settings.get('app'),
     ])
-    rooms.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'vi'))
-    invoices.sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.createdAt.localeCompare(a.createdAt))
+    rooms.sort(compareRooms)
+    const roomById = buildRoomById(rooms)
+    invoices.sort((a, b) => compareInvoicesByRoom(a, b, roomById, 'desc'))
     return {
       rooms,
       tenancies,

@@ -3,7 +3,7 @@ import { invoiceStatusLabel, invoiceAbsorbedBy } from '../../data/selectors'
 import { useDataset } from '../../data/store'
 import { outstandingOf } from '../../domain/billing'
 import * as dt from '../../domain/dates'
-import { compareRooms } from '../../domain/roomOrder'
+import { buildRoomById, compareInvoicesByRoom } from '../../domain/roomOrder'
 import { formatMoney } from '../../domain/money'
 import type { ID, Period } from '../../domain/types'
 import { buildReceiptBlob } from '../../receipt/buildReceiptBlob'
@@ -29,26 +29,12 @@ export function PrintBatchPage() {
   const pageBlobsRef = useRef<Blob[]>([])
 
   const roomName = useMemo(() => new Map(data.rooms.map((r) => [r.id, r.name])), [data.rooms])
-  const roomById = useMemo(() => new Map(data.rooms.map((r) => [r.id, r])), [data.rooms])
-
-  const compareInvoicesForPrint = (
-    a: { roomId: string; issueDate: string },
-    b: { roomId: string; issueDate: string },
-  ) => {
-    const ra = roomById.get(a.roomId)
-    const rb = roomById.get(b.roomId)
-    const roomCmp = compareRooms(
-      { order: ra?.order ?? 0, name: ra?.name ?? '' },
-      { order: rb?.order ?? 0, name: rb?.name ?? '' },
-    )
-    if (roomCmp !== 0) return roomCmp
-    return a.issueDate.localeCompare(b.issueDate)
-  }
+  const roomById = useMemo(() => buildRoomById(data.rooms), [data.rooms])
 
   const selectedInvoices = useMemo(() => {
     return data.invoices
       .filter((invoice) => selected.has(invoice.id))
-      .sort((a, b) => compareInvoicesForPrint(a, b))
+      .sort((a, b) => compareInvoicesByRoom(a, b, roomById, 'asc'))
   }, [data.invoices, roomById, selected])
 
   const printSlotOf = useMemo(() => {
@@ -69,7 +55,7 @@ export function PrintBatchPage() {
         if (query && !label.includes(query)) return false
         return true
       })
-      .sort((a, b) => compareInvoicesForPrint(a, b))
+      .sort((a, b) => compareInvoicesByRoom(a, b, roomById, 'asc'))
   }, [data.invoices, monthFilter, roomById, roomName, search])
 
   useEffect(() => {
