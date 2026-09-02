@@ -1,7 +1,7 @@
 import { db } from '../data/db'
 import { isApplyingRemote } from './guard'
 import { applyRemoteRecord } from './apply'
-import { entityKey, getLastPullAt, queueSync, setLastPullAt } from './outbox'
+import { drainSyncQueue, getLastPullAt, queueSync, setLastPullAt } from './outbox'
 import { getSupabase } from './supabase'
 import type { RemoteSyncRecord, SyncEntityType, SyncStatus } from './types'
 
@@ -70,12 +70,11 @@ export async function maybeSeedCloud(): Promise<void> {
     await pushAllLocal()
     return
   }
-
-  await pushMissingLocal(auth.session.user.id)
 }
 
 export async function syncAfterMutation(): Promise<void> {
   if (!navigator.onLine) return
+  await drainSyncQueue()
   await runSync()
 }
 
@@ -104,15 +103,10 @@ export async function runSync(options: RunSyncOptions = {}): Promise<void> {
   notify('syncing')
 
   try {
+    await drainSyncQueue()
     await pushOutbox(auth.session.user.id)
 
-    const [localRooms, cloudRooms] = await Promise.all([
-      db.rooms.count(),
-      countCloudEntities(auth.session.user.id, 'room'),
-    ])
-    const needFullPull = options.fullPull || localRooms !== cloudRooms
-
-    if (needFullPull) {
+    if (options.fullPull) {
       await setLastPullAt('1970-01-01T00:00:00.000Z')
     }
     await pullRemote(auth.session.user.id)
@@ -129,38 +123,6 @@ export async function runSync(options: RunSyncOptions = {}): Promise<void> {
   }
 }
 
-/** Day nhung ban ghi chi co tren may nay len cloud, khong ghi de du lieu da co. */
-async function pushMissingLocal(userId: string): Promise<void> {
-  const remoteKeys = await fetchRemoteKeys(userId)
-
-  const [rooms, tenancies, tenants, readings, invoices, settings] = await Promise.all([
-    db.rooms.toArray(),
-    db.tenancies.toArray(),
-    db.tenants.toArray(),
-    db.readings.toArray(),
-    db.invoices.toArray(),
-    db.settings.get('app'),
-  ])
-
-  const queueIfMissing = async (
-    entityType: SyncEntityType,
-    entityId: string,
-    payload: unknown,
-  ): Promise<void> => {
-    const key = entityKey(entityType, entityId)
-    // Da co tren cloud (ke ca ban ghi da xoa) — khong day lai, tranh hoi sinh phong da xoa.
-    if (remoteKeys.has(key) || (await db.syncOutbox.get(key))) return
-    await queueSync(entityType, entityId, payload, false)
-  }
-
-  for (const room of rooms) await queueIfMissing('room', room.id, room)
-  for (const tenancy of tenancies) await queueIfMissing('tenancy', tenancy.id, tenancy)
-  for (const tenant of tenants) await queueIfMissing('tenant', tenant.id, tenant)
-  for (const reading of readings) await queueIfMissing('reading', reading.id, reading)
-  for (const invoice of invoices) await queueIfMissing('invoice', invoice.id, invoice)
-  if (settings) await queueIfMissing('settings', 'app', settings)
-}
-
 async function pushOutbox(userId: string): Promise<void> {
   const supabase = getSupabase()
   if (!supabase) return
@@ -168,22 +130,24 @@ async function pushOutbox(userId: string): Promise<void> {
   const rows = await db.syncOutbox.toArray()
   if (rows.length === 0) return
 
-  const payload = rows.map((row) => ({
-    user_id: userId,
-    entity_type: row.entityType,
-    entity_id: row.entityId,
-    payload: row.deleted ? null : row.payload,
-    deleted: row.deleted,
-    updated_at: row.updatedAt,
-  }))
+  const CHUNK = 80
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK)
+    const payload = chunk.map((row) => ({
+      user_id: userId,
+      entity_type: row.entityType,
+      entity_id: row.entityId,
+      payload: row.deleted ? null : row.payload,
+      deleted: row.deleted,
+      updated_at: row.updatedAt,
+    }))
 
-  const { error } = await supabase.from('sync_records').upsert(payload, {
-    onConflict: 'user_id,entity_type,entity_id',
-  })
-  if (error) throw error
-
-  // Chi xoa khoi outbox nhung ban da day len server thanh cong.
-  await db.syncOutbox.bulkDelete(rows.map((r) => r.entityKey))
+    const { error } = await supabase.from('sync_records').upsert(payload, {
+      onConflict: 'user_id,entity_type,entity_id',
+    })
+    if (error) throw error
+    await db.syncOutbox.bulkDelete(chunk.map((r) => r.entityKey))
+  }
 }
 
 async function pullRemote(userId: string): Promise<void> {
@@ -192,11 +156,26 @@ async function pullRemote(userId: string): Promise<void> {
 
   let latest = since
   for (const row of rows) {
-    const local = await db.syncOutbox.get(`${row.entity_type}:${row.entity_id}`)
-    if (local && local.updatedAt > row.updated_at) {
+    const key = `${row.entity_type}:${row.entity_id}`
+    const pending = await db.syncOutbox.get(key)
+
+    if (row.deleted) {
+      await applyRemoteRecord(row)
       latest = row.updated_at > latest ? row.updated_at : latest
       continue
     }
+
+    // Khong khoi phuc ban ghi dang cho xoa tren may nay.
+    if (pending?.deleted) {
+      latest = row.updated_at > latest ? row.updated_at : latest
+      continue
+    }
+
+    if (pending && pending.updatedAt > row.updated_at) {
+      latest = row.updated_at > latest ? row.updated_at : latest
+      continue
+    }
+
     await applyRemoteRecord(row)
     latest = row.updated_at > latest ? row.updated_at : latest
   }
@@ -221,31 +200,6 @@ async function countCloudEntities(userId: string, entityType: SyncEntityType): P
 
   if (error) throw error
   return count ?? 0
-}
-
-async function fetchRemoteKeys(userId: string): Promise<Set<string>> {
-  const supabase = getSupabase()
-  if (!supabase) return new Set()
-
-  const keys = new Set<string>()
-  let from = 0
-
-  while (true) {
-    const { data, error } = await supabase
-      .from('sync_records')
-      .select('entity_type, entity_id')
-      .eq('user_id', userId)
-      .range(from, from + REMOTE_PAGE_SIZE - 1)
-
-    if (error) throw error
-    if (!data?.length) break
-
-    for (const row of data) keys.add(`${row.entity_type}:${row.entity_id}`)
-    if (data.length < REMOTE_PAGE_SIZE) break
-    from += REMOTE_PAGE_SIZE
-  }
-
-  return keys
 }
 
 async function fetchRemoteRecords(userId: string, since: string): Promise<RemoteSyncRecord[]> {

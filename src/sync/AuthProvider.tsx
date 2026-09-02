@@ -61,7 +61,7 @@ function bindAuthListeners(
     .then(({ data }) => {
       setSession(data.session)
       if (data.session) {
-        void maybeSeedCloud().then(() => runSync())
+        void maybeSeedCloud().then(() => runSync({ fullPull: true }))
       }
     })
     .catch(() => setSession(null))
@@ -73,7 +73,7 @@ function bindAuthListeners(
   const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
     setSession(next)
     if (next) {
-      void maybeSeedCloud().then(() => runSync())
+      void maybeSeedCloud().then(() => runSync({ fullPull: true }))
       void subscribeRealtime(next.user.id)
     } else {
       unsubscribeRealtime()
@@ -153,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) return 'Chưa bật đồng bộ — vào Cài đặt bấm Kết nối'
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return error.message
-    await runSync()
+    await runSync({ fullPull: true })
     return null
   }, [])
 

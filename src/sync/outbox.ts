@@ -5,21 +5,32 @@ export function entityKey(type: SyncEntityType, id: string): string {
   return `${type}:${id}`
 }
 
+/** Dam bao syncAfterMutation doi het hang doi tu Dexie hooks. */
+let pendingQueues: Promise<void> = Promise.resolve()
+
 export async function queueSync(
   entityType: SyncEntityType,
   entityId: string,
   payload: unknown | null,
   deleted: boolean,
+  updatedAt?: string,
 ): Promise<void> {
-  const row = {
-    entityKey: entityKey(entityType, entityId),
-    entityType,
-    entityId,
-    payload: deleted ? null : payload,
-    updatedAt: new Date().toISOString(),
-    deleted,
-  }
-  await db.syncOutbox.put(row)
+  const stamp = updatedAt ?? new Date().toISOString()
+  pendingQueues = pendingQueues.then(async () => {
+    await db.syncOutbox.put({
+      entityKey: entityKey(entityType, entityId),
+      entityType,
+      entityId,
+      payload: deleted ? null : payload,
+      updatedAt: stamp,
+      deleted,
+    })
+  })
+  return pendingQueues
+}
+
+export async function drainSyncQueue(): Promise<void> {
+  await pendingQueues
 }
 
 export async function clearOutboxEntry(entityType: SyncEntityType, entityId: string): Promise<void> {

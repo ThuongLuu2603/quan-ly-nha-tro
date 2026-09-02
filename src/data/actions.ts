@@ -24,6 +24,7 @@ import { db, newId } from './db'
 import { initSupabaseFromDb } from '../sync/supabase'
 import { syncAfterMutation } from '../sync/engine'
 import { assertCanMutate } from '../sync/mutation'
+import { queueSync } from '../sync/outbox'
 import {
   billedUtilityPeriods,
   carryOverOf,
@@ -117,6 +118,13 @@ export async function deleteRoom(roomId: ID): Promise<void> {
   assertCanMutate()
   const tenancies = await db.tenancies.where('roomId').equals(roomId).toArray()
   const tenancyIds = tenancies.map((t) => t.id)
+  const invoices = await db.invoices.where('roomId').equals(roomId).toArray()
+  const readings = await db.readings.where('roomId').equals(roomId).toArray()
+  const tenantRows = (
+    await Promise.all(tenancyIds.map((id) => db.tenants.where('tenancyId').equals(id).toArray()))
+  ).flat()
+  const deletedAt = new Date().toISOString()
+
   await db.transaction('rw', db.rooms, db.tenancies, db.tenants, db.readings, db.invoices, async () => {
     await db.invoices.where('roomId').equals(roomId).delete()
     await db.readings.where('roomId').equals(roomId).delete()
@@ -124,6 +132,13 @@ export async function deleteRoom(roomId: ID): Promise<void> {
     await db.tenancies.where('roomId').equals(roomId).delete()
     await db.rooms.delete(roomId)
   })
+
+  for (const invoice of invoices) await queueSync('invoice', invoice.id, null, true, deletedAt)
+  for (const reading of readings) await queueSync('reading', reading.id, null, true, deletedAt)
+  for (const tenant of tenantRows) await queueSync('tenant', tenant.id, null, true, deletedAt)
+  for (const tenancy of tenancies) await queueSync('tenancy', tenancy.id, null, true, deletedAt)
+  await queueSync('room', roomId, null, true, deletedAt)
+
   await syncAfterMutation()
 }
 

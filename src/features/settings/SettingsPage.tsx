@@ -99,8 +99,8 @@ export function SettingsPage() {
               </Banner>
             )}
             <div className="small muted">
-              Dùng cùng cách đăng nhập trên mọi máy. Cần <strong>mạng</strong> để lưu/xóa — offline chỉ
-              xem. Cùng địa chỉ <strong>qlnt.marchluu.io.vn</strong>.
+              Đồng bộ từng phòng/phiếu riêng — bản <strong>sửa mới hơn</strong> được giữ (last-write-wins).
+              Sửa phòng A không ảnh hưởng phòng B. Cần <strong>mạng</strong> để lưu/xóa.
             </div>
             <button
               className="btn block"
