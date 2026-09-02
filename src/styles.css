@@ -340,6 +340,29 @@ textarea.input {
   gap: 12px;
 }
 
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.rent-only-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.rent-only-toggle input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
 .pill {
   display: inline-flex;
   align-items: center;

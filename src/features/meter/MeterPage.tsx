@@ -3,6 +3,7 @@ import { saveReading } from '../../data/actions'
 import { activeTenancy, readingOf, readingsOfRoom } from '../../data/selectors'
 import { useDataset, type Dataset } from '../../data/store'
 import * as dt from '../../domain/dates'
+import { roomCollectsMeteredUtilities } from '../../domain/billing'
 import { formatMoney } from '../../domain/money'
 import type { ID, Period, Room } from '../../domain/types'
 import { Banner, Card, EmptyState, NumberInput, useToast } from '../../ui/components'
@@ -50,7 +51,10 @@ export function MeterPage() {
   const [drafts, setDrafts] = useState<Record<ID, Draft>>({})
 
   const rooms = useMemo(
-    () => data.rooms.filter((room) => activeTenancy(data, room.id)),
+    () =>
+      data.rooms.filter(
+        (room) => roomCollectsMeteredUtilities(room) && activeTenancy(data, room.id),
+      ),
     [data],
   )
 
@@ -101,7 +105,10 @@ export function MeterPage() {
       </div>
 
       {rooms.length === 0 ? (
-        <EmptyState icon="⏱" text="Chưa có phòng nào đang có khách ở." />
+        <EmptyState
+          icon="⏱"
+          text="Không có phòng trọ nào cần nhập chỉ số tháng này (phòng chỉ thu tiền nhà sẽ không hiện ở đây)."
+        />
       ) : (
         <>
           {missing > 0 && (

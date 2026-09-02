@@ -1,4 +1,10 @@
-import { outstandingOf, readingsToMap, statusOf, wasCarriedForward } from '../domain/billing'
+import {
+  outstandingOf,
+  readingsToMap,
+  roomCollectsMeteredUtilities,
+  statusOf,
+  wasCarriedForward,
+} from '../domain/billing'
 import * as dt from '../domain/dates'
 import type { ID, Invoice, Period, Reading, Tenancy, Tenant } from '../domain/types'
 import type { Dataset } from './store'
@@ -88,6 +94,7 @@ export interface RoomOverview {
 }
 
 export function roomOverview(data: Dataset, roomId: ID, todayISO: string): RoomOverview {
+  const room = data.rooms.find((r) => r.id === roomId)
   const tenancy = activeTenancy(data, roomId)
   const tenants = tenantsOf(data, tenancy?.id)
   const primary = tenants.find((t) => t.isPrimary) ?? tenants[0]
@@ -101,8 +108,12 @@ export function roomOverview(data: Dataset, roomId: ID, todayISO: string): RoomO
   let hasReadingForNextInvoice = false
   if (tenancy) {
     nextIssueDate = nextIssueDateFor(data, tenancy, todayISO)
-    const period = dt.prevPeriod(dt.periodOf(nextIssueDate))
-    hasReadingForNextInvoice = Boolean(readingOf(data, roomId, period))
+    if (room && roomCollectsMeteredUtilities(room)) {
+      const period = dt.prevPeriod(dt.periodOf(nextIssueDate))
+      hasReadingForNextInvoice = Boolean(readingOf(data, roomId, period))
+    } else {
+      hasReadingForNextInvoice = true
+    }
   }
 
   return {

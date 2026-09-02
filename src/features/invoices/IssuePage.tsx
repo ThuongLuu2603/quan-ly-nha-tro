@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { issueMonthlyInvoice, previewMonthly } from '../../data/actions'
 import { activeTenancy, nextIssueDateFor, primaryTenant } from '../../data/selectors'
 import { useDataset } from '../../data/store'
+import { roomCollectsMeteredUtilities } from '../../domain/billing'
 import * as dt from '../../domain/dates'
 import { formatMoney } from '../../domain/money'
 import type { ID } from '../../domain/types'
@@ -99,7 +100,9 @@ export function IssuePage() {
               {rentLine}
             </div>
             <div className="tiny muted">
-              Điện nước {dt.formatPeriod(item.preview.utilityPeriod)}
+              {roomCollectsMeteredUtilities(item.room)
+                ? `Điện nước ${dt.formatPeriod(item.preview.utilityPeriod)}`
+                : 'Chỉ thu tiền nhà'}
             </div>
             {item.preview.warnings.map((w) => (
               <div key={w} className="tiny" style={{ color: 'var(--warn)' }}>

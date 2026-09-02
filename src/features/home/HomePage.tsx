@@ -8,7 +8,7 @@ import {
   totalDepositHeld,
 } from '../../data/selectors'
 import { useDataset } from '../../data/store'
-import { cashPaidAmount, outstandingOf, ownTotal } from '../../domain/billing'
+import { cashPaidAmount, outstandingOf, ownTotal, roomCollectsMeteredUtilities } from '../../domain/billing'
 import * as dt from '../../domain/dates'
 import { formatMoney } from '../../domain/money'
 import { Banner, Card, EmptyState, Pill } from '../../ui/components'
@@ -51,7 +51,10 @@ export function HomePage() {
 
   const utilityPeriod = dt.prevPeriod(thisPeriod)
   const missingReadings = data.rooms.filter(
-    (room) => activeTenancy(data, room.id) && !readingOf(data, room.id, utilityPeriod),
+    (room) =>
+      roomCollectsMeteredUtilities(room) &&
+      activeTenancy(data, room.id) &&
+      !readingOf(data, room.id, utilityPeriod),
   )
 
   const debtors = data.rooms

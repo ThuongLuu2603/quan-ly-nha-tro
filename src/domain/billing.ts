@@ -95,20 +95,37 @@ function utilityLines(
   from: { electric: number; water: number },
   to: { electric: number; water: number },
 ): InvoiceLine[] {
-  const kwh = Math.max(0, to.electric - from.electric)
-  const m3 = Math.max(0, to.water - from.water)
-  return [
-    line('electric', `Tiền điện ${label}`, kwh * room.electricPrice, {
-      detail: `${from.electric} → ${to.electric} = ${kwh} kWh`,
-      qty: kwh,
-      unitPrice: room.electricPrice,
-    }),
-    line('water', `Tiền nước ${label}`, m3 * room.waterPrice, {
-      detail: `${from.water} → ${to.water} = ${m3} m³`,
-      qty: m3,
-      unitPrice: room.waterPrice,
-    }),
-  ]
+  const lines: InvoiceLine[] = []
+  if (room.electricPrice > 0) {
+    const kwh = Math.max(0, to.electric - from.electric)
+    lines.push(
+      line('electric', `Tiền điện ${label}`, kwh * room.electricPrice, {
+        detail: `${from.electric} → ${to.electric} = ${kwh} kWh`,
+        qty: kwh,
+        unitPrice: room.electricPrice,
+      }),
+    )
+  }
+  if (room.waterPrice > 0) {
+    const m3 = Math.max(0, to.water - from.water)
+    lines.push(
+      line('water', `Tiền nước ${label}`, m3 * room.waterPrice, {
+        detail: `${from.water} → ${to.water} = ${m3} m³`,
+        qty: m3,
+        unitPrice: room.waterPrice,
+      }),
+    )
+  }
+  return lines
+}
+
+/** Phong tro thu dien nuoc theo chi so. Nha cho thue chi thu tien nha thi de ca 3 muc = 0. */
+export function roomCollectsMeteredUtilities(room: Room): boolean {
+  return room.electricPrice > 0 || room.waterPrice > 0
+}
+
+export function roomCollectsGarbage(room: Room): boolean {
+  return (room.garbageFee ?? 0) > 0
 }
 
 export interface MonthlyBuild {
@@ -157,29 +174,32 @@ export function buildMonthlyInvoice(input: {
 
   const utilityEnd = dt.periodBounds(utilityPeriod).end
   const tenantWasHere = tenancy.startDate <= utilityEnd
-  if (!tenantWasHere) {
-    warnings.push(`Khách chưa ở trong ${dt.formatPeriod(utilityPeriod)} nên phiếu không có điện nước.`)
-  } else {
-    const reading = readings.get(utilityPeriod)
-    if (!reading) {
-      warnings.push(`Chưa nhập chỉ số ${dt.formatPeriod(utilityPeriod)} cho phòng ${room.name}.`)
+
+  if (roomCollectsMeteredUtilities(room)) {
+    if (!tenantWasHere) {
+      warnings.push(`Khách chưa ở trong ${dt.formatPeriod(utilityPeriod)} nên phiếu không có điện nước.`)
     } else {
-      const base = baselineFor(tenancy, readings, utilityPeriod)
-      const label = `${dt.formatPeriod(utilityPeriod)} (${dt.formatPeriodRange(utilityPeriod)})`
-      lines.push(
-        ...utilityLines(room, label, base, {
-          electric: reading.electricEnd,
-          water: reading.waterEnd,
-        }),
-      )
-      if (reading.electricEnd < base.electric || reading.waterEnd < base.water) {
-        warnings.push('Chỉ số mới nhỏ hơn chỉ số cũ, kiểm tra lại trước khi gửi.')
+      const reading = readings.get(utilityPeriod)
+      if (!reading) {
+        warnings.push(`Chưa nhập chỉ số ${dt.formatPeriod(utilityPeriod)} cho phòng ${room.name}.`)
+      } else {
+        const base = baselineFor(tenancy, readings, utilityPeriod)
+        const label = `${dt.formatPeriod(utilityPeriod)} (${dt.formatPeriodRange(utilityPeriod)})`
+        lines.push(
+          ...utilityLines(room, label, base, {
+            electric: reading.electricEnd,
+            water: reading.waterEnd,
+          }),
+        )
+        if (reading.electricEnd < base.electric || reading.waterEnd < base.water) {
+          warnings.push('Chỉ số mới nhỏ hơn chỉ số cũ, kiểm tra lại trước khi gửi.')
+        }
       }
     }
   }
 
   const garbageFee = room.garbageFee ?? 0
-  if (garbageFee > 0 && tenantWasHere) {
+  if (roomCollectsGarbage(room) && tenantWasHere) {
     lines.push(line('garbage', 'Tiền rác', garbageFee))
   }
 
@@ -315,32 +335,35 @@ export function buildCheckoutInvoice(input: {
 
   const checkoutPeriod = dt.periodOf(checkoutDate)
   const startPeriod = dt.periodOf(tenancy.startDate)
-  const pending = dt
-    .periodRange(startPeriod, checkoutPeriod)
-    .filter((p) => !billedUtilityPeriods.has(p))
 
-  for (const period of pending) {
-    const base = baselineFor(tenancy, readings, period)
-    if (period === checkoutPeriod) {
-      const { start } = dt.periodBounds(period)
-      const from = tenancy.startDate > start ? tenancy.startDate : start
-      const label = `${dt.formatDateShort(from)} – ${dt.formatDateShort(checkoutDate)}/${period.slice(0, 4)}`
-      lines.push(
-        ...utilityLines(room, label, base, { electric: finalElectric, water: finalWater }),
-      )
-    } else {
-      const reading = readings.get(period)
-      if (!reading) {
-        warnings.push(`Thiếu chỉ số ${dt.formatPeriod(period)}, phần điện nước kỳ này chưa được tính.`)
-        continue
+  if (roomCollectsMeteredUtilities(room)) {
+    const pending = dt
+      .periodRange(startPeriod, checkoutPeriod)
+      .filter((p) => !billedUtilityPeriods.has(p))
+
+    for (const period of pending) {
+      const base = baselineFor(tenancy, readings, period)
+      if (period === checkoutPeriod) {
+        const { start } = dt.periodBounds(period)
+        const from = tenancy.startDate > start ? tenancy.startDate : start
+        const label = `${dt.formatDateShort(from)} – ${dt.formatDateShort(checkoutDate)}/${period.slice(0, 4)}`
+        lines.push(
+          ...utilityLines(room, label, base, { electric: finalElectric, water: finalWater }),
+        )
+      } else {
+        const reading = readings.get(period)
+        if (!reading) {
+          warnings.push(`Thiếu chỉ số ${dt.formatPeriod(period)}, phần điện nước kỳ này chưa được tính.`)
+          continue
+        }
+        const label = `${dt.formatPeriod(period)} (${dt.formatPeriodRange(period)})`
+        lines.push(
+          ...utilityLines(room, label, base, {
+            electric: reading.electricEnd,
+            water: reading.waterEnd,
+          }),
+        )
       }
-      const label = `${dt.formatPeriod(period)} (${dt.formatPeriodRange(period)})`
-      lines.push(
-        ...utilityLines(room, label, base, {
-          electric: reading.electricEnd,
-          water: reading.waterEnd,
-        }),
-      )
     }
   }
 

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { checkout, previewCheckout } from '../../data/actions'
 import { activeTenancy, tenantsOf } from '../../data/selectors'
 import { useDataset } from '../../data/store'
+import { roomCollectsMeteredUtilities } from '../../domain/billing'
 import * as dt from '../../domain/dates'
 import { formatMoney } from '../../domain/money'
 import {
@@ -65,7 +66,9 @@ export function CheckoutPage() {
   }
 
   const occupants = tenantsOf(data, tenancy.id)
-  const ready = finalElectric !== null && finalWater !== null && !saving
+  const collectsMetered = roomCollectsMeteredUtilities(room)
+  const ready =
+    (!collectsMetered || (finalElectric !== null && finalWater !== null)) && !saving
   const refundToTenant = preview ? -preview.total : 0
 
   const submit = async () => {
@@ -102,28 +105,36 @@ export function CheckoutPage() {
             <DateInput value={checkoutDate} onChange={setCheckoutDate} />
           </Field>
 
-          <div className="grid-2">
-            <Field label="Chỉ số điện chốt" hint={`Bàn giao ${tenancy.electricStart}`}>
-              <NumberInput
-                value={finalElectric}
-                onChange={setFinalElectric}
-                placeholder="Số trên đồng hồ"
-                invalid={finalElectric !== null && finalElectric < tenancy.electricStart}
-              />
-            </Field>
-            <Field label="Chỉ số nước chốt" hint={`Bàn giao ${tenancy.waterStart}`}>
-              <NumberInput
-                value={finalWater}
-                onChange={setFinalWater}
-                placeholder="Số trên đồng hồ"
-                invalid={finalWater !== null && finalWater < tenancy.waterStart}
-              />
-            </Field>
-          </div>
+          {collectsMetered ? (
+            <>
+              <div className="grid-2">
+                <Field label="Chỉ số điện chốt" hint={`Bàn giao ${tenancy.electricStart}`}>
+                  <NumberInput
+                    value={finalElectric}
+                    onChange={setFinalElectric}
+                    placeholder="Số trên đồng hồ"
+                    invalid={finalElectric !== null && finalElectric < tenancy.electricStart}
+                  />
+                </Field>
+                <Field label="Chỉ số nước chốt" hint={`Bàn giao ${tenancy.waterStart}`}>
+                  <NumberInput
+                    value={finalWater}
+                    onChange={setFinalWater}
+                    placeholder="Số trên đồng hồ"
+                    invalid={finalWater !== null && finalWater < tenancy.waterStart}
+                  />
+                </Field>
+              </div>
 
-          <div className="small muted">
-            Điện nước kỳ cuối chốt ngay tại ngày trả phòng, không đợi hết tháng.
-          </div>
+              <div className="small muted">
+                Điện nước kỳ cuối chốt ngay tại ngày trả phòng, không đợi hết tháng.
+              </div>
+            </>
+          ) : (
+            <div className="small muted">
+              Phòng này chỉ thu tiền nhà — không cần chốt điện nước khi trả phòng.
+            </div>
+          )}
         </div>
       </Card>
 
@@ -182,7 +193,9 @@ export function CheckoutPage() {
           ))}
 
           {preview.lines.length === 0 ? (
-            <div className="muted small">Nhập chỉ số công tơ để xem bảng tất toán.</div>
+            <div className="muted small">
+              {collectsMetered ? 'Nhập chỉ số công tơ để xem bảng tất toán.' : 'Chưa có khoản phát sinh.'}
+            </div>
           ) : (
             preview.lines.map((line) => (
               <div className="line-row" key={line.id}>

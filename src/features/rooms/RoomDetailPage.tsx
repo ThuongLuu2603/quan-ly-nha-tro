@@ -9,7 +9,7 @@ import {
   tenantsOf,
 } from '../../data/selectors'
 import { useDataset } from '../../data/store'
-import { outstandingOf } from '../../domain/billing'
+import { outstandingOf, roomCollectsMeteredUtilities } from '../../domain/billing'
 import * as dt from '../../domain/dates'
 import { formatMoney } from '../../domain/money'
 import type { Tenant } from '../../domain/types'
@@ -190,6 +190,14 @@ export function RoomDetailPage() {
               <span className="num">{formatMoney(room.garbageFee)} đ / tháng</span>
             </div>
           )}
+          {!roomCollectsMeteredUtilities(room) &&
+            (room.garbageFee ?? 0) === 0 &&
+            room.extraFees.length === 0 && (
+              <div className="row between">
+                <span className="muted small">Thu tiền</span>
+                <span>Chỉ tiền nhà</span>
+              </div>
+            )}
           {room.extraFees.map((fee) => (
             <div className="row between" key={fee.id}>
               <span className="muted small">{fee.label}</span>

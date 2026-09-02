@@ -29,6 +29,20 @@ export function RoomFormSheet({
   const [note, setNote] = useState(room?.note ?? '')
   const [saving, setSaving] = useState(false)
 
+  const rentOnly = electricPrice === 0 && waterPrice === 0 && garbageFee === 0
+
+  const setRentOnly = (on: boolean) => {
+    if (on) {
+      setElectricPrice(0)
+      setWaterPrice(0)
+      setGarbageFee(0)
+      return
+    }
+    setElectricPrice(room?.electricPrice || settings.defaultElectricPrice)
+    setWaterPrice(room?.waterPrice || settings.defaultWaterPrice)
+    setGarbageFee(room?.garbageFee ?? settings.defaultGarbageFee ?? 0)
+  }
+
   const save = async () => {
     if (!name.trim() || saving) return
     setSaving(true)
@@ -51,7 +65,7 @@ export function RoomFormSheet({
   return (
     <Sheet title={room ? `Sửa phòng ${room.name}` : 'Thêm phòng'} onClose={onClose}>
       <div className="stack">
-        <Field label="Tên phòng">
+        <Field label="Tên phòng" hint="Phòng trọ hoặc tên nhà cho thuê (vd: Nhà 12).">
           <TextInput value={name} onChange={setName} placeholder="P101" />
         </Field>
 
@@ -71,18 +85,26 @@ export function RoomFormSheet({
           <Select value={cycleDay} onChange={setCycleDay} options={CYCLE_DAYS} />
         </Field>
 
-        <div className="grid-2">
-          <Field label="Giá điện / kWh">
-            <MoneyInput value={electricPrice} onChange={setElectricPrice} />
+        <label className="rent-only-toggle">
+          <input type="checkbox" checked={rentOnly} onChange={(e) => setRentOnly(e.target.checked)} />
+          <span>
+            <strong>Chỉ thu tiền nhà</strong> — khách tự trả điện, nước, rác. App không nhập chỉ số và
+            không cộng các khoản này vào phiếu.
+          </span>
+        </label>
+
+        <div className="grid-3">
+          <Field label="Điện / kWh">
+            <MoneyInput value={electricPrice} onChange={setElectricPrice} disabled={rentOnly} />
           </Field>
-          <Field label="Giá nước / m³">
-            <MoneyInput value={waterPrice} onChange={setWaterPrice} />
+          <Field label="Nước / m³">
+            <MoneyInput value={waterPrice} onChange={setWaterPrice} disabled={rentOnly} />
+          </Field>
+          <Field label="Rác / tháng">
+            <MoneyInput value={garbageFee} onChange={setGarbageFee} disabled={rentOnly} />
           </Field>
         </div>
-
-        <Field label="Tiền rác / tháng" hint="Khoản cố định, tự cộng vào mỗi phiếu tháng. Để 0 nếu không thu.">
-          <MoneyInput value={garbageFee} onChange={setGarbageFee} />
-        </Field>
+        <div className="hint">Để 0 nếu không thu. Khoản cố định tự cộng vào mỗi phiếu tháng.</div>
 
         <div className="field">
           <label>Khoản cố định hàng tháng</label>

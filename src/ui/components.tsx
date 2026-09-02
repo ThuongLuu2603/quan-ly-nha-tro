@@ -110,10 +110,12 @@ export function MoneyInput({
   value,
   onChange,
   placeholder,
+  disabled,
 }: {
   value: number
   onChange: (value: number) => void
   placeholder?: string
+  disabled?: boolean
 }) {
   const [text, setText] = useState(() => (value ? formatMoney(value) : ''))
   const typing = useRef(false)
@@ -130,6 +132,7 @@ export function MoneyInput({
       inputMode="numeric"
       value={text}
       placeholder={placeholder ?? '0'}
+      disabled={disabled}
       onFocus={() => {
         typing.current = true
       }}

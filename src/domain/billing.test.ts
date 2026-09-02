@@ -119,6 +119,22 @@ describe('phieu thang', () => {
     expect(result.total).toBe(3_000_000 + 20 * 4000 + 2 * 20000 + 50_000)
   })
 
+  it('phong chi thu tien nha khong can chi so dien nuoc', () => {
+    const rentOnlyRoom: Room = { ...room, electricPrice: 0, waterPrice: 0, garbageFee: 0 }
+    const result = buildMonthlyInvoice({
+      room: rentOnlyRoom,
+      tenancy: tenancy(),
+      issueDate: '2026-09-01',
+      readings: readingsToMap([]),
+      carryOver: 0,
+    })
+    expect(result.warnings).toHaveLength(0)
+    expect(result.lines.some((l) => l.type === 'electric' || l.type === 'water' || l.type === 'garbage')).toBe(
+      false,
+    )
+    expect(result.total).toBe(3_000_000)
+  })
+
   it('canh bao khi thieu chi so', () => {
     const result = buildMonthlyInvoice({
       room,

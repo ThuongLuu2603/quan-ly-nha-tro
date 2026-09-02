@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { moveIn } from '../../data/actions'
 import { activeTenancy } from '../../data/selectors'
 import { useDataset } from '../../data/store'
-import { buildMoveInInvoice } from '../../domain/billing'
+import { buildMoveInInvoice, roomCollectsMeteredUtilities } from '../../domain/billing'
 import * as dt from '../../domain/dates'
 import { formatMoney } from '../../domain/money'
 import {
@@ -121,14 +121,16 @@ export function MoveInPage() {
             </Field>
           </div>
 
-          <div className="grid-2">
-            <Field label="Chỉ số điện bàn giao">
-              <NumberInput value={electricStart} onChange={setElectricStart} />
-            </Field>
-            <Field label="Chỉ số nước bàn giao">
-              <NumberInput value={waterStart} onChange={setWaterStart} />
-            </Field>
-          </div>
+          {room && roomCollectsMeteredUtilities(room) && (
+            <div className="grid-2">
+              <Field label="Chỉ số điện bàn giao">
+                <NumberInput value={electricStart} onChange={setElectricStart} />
+              </Field>
+              <Field label="Chỉ số nước bàn giao">
+                <NumberInput value={waterStart} onChange={setWaterStart} />
+              </Field>
+            </div>
+          )}
         </div>
       </Card>
 
