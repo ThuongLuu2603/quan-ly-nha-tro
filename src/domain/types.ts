@@ -66,7 +66,7 @@ export interface Reading {
   readAt: ISODate
 }
 
-export type InvoiceKind = 'moveIn' | 'monthly' | 'checkout'
+export type InvoiceKind = 'moveIn' | 'monthly' | 'checkout' | 'adjustment'
 
 export type LineType =
   | 'rent'

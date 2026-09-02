@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import * as dt from './dates'
 import {
   buildCheckoutInvoice,
+  buildDepositTopUpInvoice,
   buildMonthlyInvoice,
   buildMoveInInvoice,
   cashPaidAmount,
@@ -296,5 +297,17 @@ describe('tra phong va tat toan coc', () => {
 
     expect(result.total).toBe(10 * 4000 + 1 * 20000 + 200_000 - 3_000_000)
     expect(result.total).toBeLessThan(0)
+  })
+})
+
+describe('coc bo sung', () => {
+  it('tao dong tien coc bo sung', () => {
+    const result = buildDepositTopUpInvoice({
+      amount: 2_000_000,
+      previousDeposit: 0,
+      newDeposit: 2_000_000,
+    })
+    expect(result.total).toBe(2_000_000)
+    expect(result.lines[0]?.type).toBe('deposit')
   })
 })

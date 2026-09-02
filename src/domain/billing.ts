@@ -299,6 +299,20 @@ export function buildMoveInInvoice(input: {
   }
 }
 
+/** Phieu thu coc bo sung giua ky thue. */
+export function buildDepositTopUpInvoice(input: {
+  amount: number
+  previousDeposit: number
+  newDeposit: number
+}): { lines: InvoiceLine[]; total: number } {
+  const lines: InvoiceLine[] = [
+    line('deposit', 'Tiền cọc bổ sung', input.amount, {
+      detail: `Cọc đang giữ ${input.previousDeposit.toLocaleString('vi-VN')} → ${input.newDeposit.toLocaleString('vi-VN')} đ`,
+    }),
+  ]
+  return { lines, total: sumLines(lines) }
+}
+
 export interface CheckoutBuild {
   lines: InvoiceLine[]
   total: number

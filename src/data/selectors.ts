@@ -33,6 +33,17 @@ export function readingsOfRoom(data: Dataset, roomId: ID): Reading[] {
   return data.readings.filter((r) => r.roomId === roomId).sort((a, b) => a.period.localeCompare(b.period))
 }
 
+/** Chi so dong ho moi nhat da luu cho phong (dung lam ban giao khi nhan khach moi). */
+export function latestMeterReadingForRoom(
+  data: Dataset,
+  roomId: ID,
+): { electric: number; water: number; period: Period } | null {
+  const readings = readingsOfRoom(data, roomId)
+  const latest = readings.at(-1)
+  if (!latest) return null
+  return { electric: latest.electricEnd, water: latest.waterEnd, period: latest.period }
+}
+
 export function readingMapOfRoom(data: Dataset, roomId: ID): Map<Period, Reading> {
   return readingsToMap(readingsOfRoom(data, roomId))
 }

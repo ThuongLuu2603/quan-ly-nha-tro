@@ -153,6 +153,7 @@ export function InvoiceDetailPage() {
         {invoice.sentAt ? <Pill tone="muted">Đã gửi</Pill> : <Pill tone="muted">Chưa gửi</Pill>}
         {invoice.kind === 'moveIn' && <Pill tone="accent">Nhận phòng</Pill>}
         {invoice.kind === 'checkout' && <Pill tone="warn">Tất toán</Pill>}
+        {invoice.kind === 'adjustment' && <Pill tone="accent">Cọc bổ sung</Pill>}
       </div>
 
       <Card title="Nội dung phiếu">

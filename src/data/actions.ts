@@ -1,5 +1,6 @@
 import {
   buildCheckoutInvoice,
+  buildDepositTopUpInvoice,
   buildMonthlyInvoice,
   buildMoveInInvoice,
   invoiceCode,
@@ -232,6 +233,62 @@ export async function updateTenancy(tenancyId: ID, patch: Partial<Tenancy>): Pro
   await db.tenancies.put({ ...current, ...patch })
 }
 
+export interface AdjustTenancyInput {
+  room: Room
+  tenancy: Tenancy
+  rent: number
+  deposit: number
+  /** Mac dinh true khi coc tang — tao phieu thu coc bo sung. */
+  issueDepositInvoice?: boolean
+  note?: string
+}
+
+/**
+ * Cap nhat gia thue / coc dang giu cho luot thue hien tai.
+ * Gia moi ap dung tu ky chua thu (rentPaidThrough). Coc tang co the tao phieu thu.
+ */
+export async function adjustTenancy(input: AdjustTenancyInput): Promise<ID | null> {
+  const { room, tenancy, rent, deposit, note } = input
+  const depositIncrease = Math.max(0, deposit - tenancy.deposit)
+  const issueDepositInvoice = input.issueDepositInvoice !== false && depositIncrease > 0
+  let invoiceId: ID | null = null
+
+  await db.transaction('rw', db.tenancies, db.invoices, async () => {
+    await db.tenancies.put({
+      ...tenancy,
+      rent: Math.round(rent),
+      deposit: Math.round(deposit),
+      note: note?.trim() || tenancy.note,
+    })
+
+    if (issueDepositInvoice) {
+      const issueDate = dt.today()
+      const build = buildDepositTopUpInvoice({
+        amount: depositIncrease,
+        previousDeposit: tenancy.deposit,
+        newDeposit: deposit,
+      })
+      const invoice: Invoice = {
+        id: newId(),
+        code: invoiceCode(room.name, issueDate),
+        roomId: room.id,
+        tenancyId: tenancy.id,
+        kind: 'adjustment',
+        issueDate,
+        lines: build.lines,
+        total: build.total,
+        payments: [],
+        note: note?.trim() || undefined,
+        createdAt: new Date().toISOString(),
+      }
+      await db.invoices.put(invoice)
+      invoiceId = invoice.id
+    }
+  })
+
+  return invoiceId
+}
+
 export interface IssueMonthlyInput {
   data: Dataset
   room: Room
@@ -401,6 +458,14 @@ export async function deleteInvoice(invoiceId: ID): Promise<void> {
     }
     if (invoice.kind === 'checkout' && tenancy) {
       await db.tenancies.update(tenancy.id, { status: 'active', endDate: undefined })
+    }
+    if (invoice.kind === 'adjustment' && tenancy) {
+      const depositLine = invoice.lines.find((l) => l.type === 'deposit' && l.amount > 0)
+      if (depositLine) {
+        await db.tenancies.update(tenancy.id, {
+          deposit: Math.max(0, tenancy.deposit - depositLine.amount),
+        })
+      }
     }
     await undoCarriedForward(invoiceId)
     await db.invoices.delete(invoiceId)

@@ -30,7 +30,6 @@ export function IssuePage() {
           tenancy,
           issueDate,
           preview,
-          due: issueDate <= now,
           tenantName: primaryTenant(data, tenancy.id)?.fullName ?? '',
         }
       })
@@ -38,8 +37,8 @@ export function IssuePage() {
       .sort((a, b) => a.issueDate.localeCompare(b.issueDate) || a.room.name.localeCompare(b.room.name, 'vi'))
   }, [data, now])
 
-  const due = candidates.filter((c) => c.due)
-  const upcoming = candidates.filter((c) => !c.due)
+  const due = candidates.filter((c) => c.issueDate <= now)
+  const nextByRoom = candidates.filter((c) => c.issueDate > now)
 
   const toggle = (roomId: ID) => {
     setSelected((prev) => {
@@ -55,7 +54,7 @@ export function IssuePage() {
     setBusy(true)
     let count = 0
     let lastId: ID | null = null
-    for (const item of candidates) {
+    for (const item of due) {
       if (!selected.has(item.room.id)) continue
       lastId = await issueMonthlyInvoice({
         data,
@@ -93,7 +92,7 @@ export function IssuePage() {
               <span className="strong" style={{ fontSize: 16 }}>
                 {item.room.name}
               </span>
-              <Pill tone={item.due ? 'accent' : 'muted'}>{dt.formatDate(item.issueDate)}</Pill>
+              <Pill tone="accent">{dt.formatDate(item.issueDate)}</Pill>
               {checked && <Pill tone="ok">Đã chọn</Pill>}
             </div>
             <div className="tiny muted" style={{ marginTop: 4 }}>
@@ -139,17 +138,22 @@ export function IssuePage() {
             {due.length === 0 ? (
               <div className="muted small" style={{ padding: '0 16px 16px' }}>
                 Hôm nay chưa phòng nào tới mốc.
+                {nextByRoom.length > 0 && (
+                  <>
+                    {' '}
+                    Mốc gần nhất:{' '}
+                    {nextByRoom
+                      .slice(0, 3)
+                      .map((item) => `${item.room.name} (${dt.formatDate(item.issueDate)})`)
+                      .join(' · ')}
+                    .
+                  </>
+                )}
               </div>
             ) : (
               due.map(renderItem)
             )}
           </Card>
-
-          {upcoming.length > 0 && (
-            <Card title={`Sắp tới (${upcoming.length})`} flush>
-              {upcoming.map(renderItem)}
-            </Card>
-          )}
 
           <button
             className="btn primary block"

@@ -19,12 +19,14 @@ import { Card, EmptyState, Pill } from '../../ui/components'
 import { Page } from '../../ui/Page'
 import { RoomFormSheet } from './RoomFormSheet'
 import { TenantSheet } from './TenantSheet'
+import { TenancyAdjustSheet } from '../tenancy/TenancyAdjustSheet'
 
 export function RoomDetailPage() {
   const { roomId } = useParams()
   const navigate = useNavigate()
   const data = useDataset()
   const [editing, setEditing] = useState(false)
+  const [adjustingTenancy, setAdjustingTenancy] = useState(false)
   const [tenantSheet, setTenantSheet] = useState<{ tenant?: Tenant } | null>(null)
 
   const room = data.rooms.find((r) => r.id === roomId)
@@ -65,7 +67,14 @@ export function RoomDetailPage() {
   return (
     <Page title={`Phòng ${room.name}`} back="/phong" subtitle={room.note}>
       {tenancy ? (
-        <Card title="Lượt thuê hiện tại">
+        <Card
+          title="Lượt thuê hiện tại"
+          action={
+            <button className="btn ghost sm" onClick={() => setAdjustingTenancy(true)}>
+              Sửa
+            </button>
+          }
+        >
           <div className="stack tight">
             <div className="row between">
               <span className="muted small">Giá thuê</span>
@@ -278,6 +287,16 @@ export function RoomDetailPage() {
         </div>
       </Card>
 
+      {adjustingTenancy && tenancy && (
+        <TenancyAdjustSheet
+          room={room}
+          tenancy={tenancy}
+          onClose={() => setAdjustingTenancy(false)}
+          onSaved={(invoiceId) => {
+            if (invoiceId) navigate(`/phieu/${invoiceId}`)
+          }}
+        />
+      )}
       {editing && (
         <RoomFormSheet room={room} settings={data.settings} onClose={() => setEditing(false)} />
       )}

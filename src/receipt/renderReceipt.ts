@@ -50,6 +50,7 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): st
 function title(invoice: Invoice): string {
   if (invoice.kind === 'moveIn') return 'PHIẾU NHẬN PHÒNG'
   if (invoice.kind === 'checkout') return 'PHIẾU TẤT TOÁN TRẢ PHÒNG'
+  if (invoice.kind === 'adjustment') return 'PHIẾU THU CỌC BỔ SUNG'
   return 'PHIẾU THU TIỀN PHÒNG'
 }
 
