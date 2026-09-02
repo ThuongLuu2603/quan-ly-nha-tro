@@ -43,9 +43,18 @@ export async function copyImageToClipboard(blob: Blob): Promise<boolean> {
   }
 }
 
-/** Mo thang cua so chat Zalo cua so dien thoai da luu. */
-export function zaloChatUrl(phone: string): string {
+export function normalizePhoneForZalo(phone: string): string {
   const digits = phone.replace(/\D/g, '')
-  const normalized = digits.startsWith('84') ? `0${digits.slice(2)}` : digits
-  return `https://zalo.me/${normalized}`
+  if (digits.startsWith('84') && digits.length >= 11) return `0${digits.slice(2)}`
+  return digits
+}
+
+/** Mo chat Zalo toi so da luu (nguoi dai dien / khach). */
+export function zaloChatUrl(phone: string): string {
+  return `https://zalo.me/${normalizePhoneForZalo(phone)}`
+}
+
+/** Mo app Zalo tren dien thoai; tren may tinh mo tab zalo.me. */
+export function openZaloChat(phone: string): void {
+  window.location.assign(zaloChatUrl(phone))
 }

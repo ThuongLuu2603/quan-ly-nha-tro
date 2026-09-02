@@ -34,7 +34,7 @@ export const db = new TroDatabase()
 export const DEFAULT_SETTINGS: Settings = {
   id: 'app',
   landlordName: 'Nhà trọ',
-  phone: '',
+  phone: '0983285854',
   address: '',
   bankBin: '',
   bankAccountNo: '',
@@ -52,7 +52,14 @@ export function newId(): string {
 
 export async function ensureSettings(): Promise<Settings> {
   const existing = await db.settings.get('app')
-  if (existing) return existing
+  if (existing) {
+    if (!existing.phone) {
+      const patched = { ...existing, phone: DEFAULT_SETTINGS.phone }
+      await db.settings.put(patched)
+      return patched
+    }
+    return existing
+  }
   await db.settings.put(DEFAULT_SETTINGS)
   return DEFAULT_SETTINGS
 }

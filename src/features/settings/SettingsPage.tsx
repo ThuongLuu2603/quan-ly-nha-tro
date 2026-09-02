@@ -86,11 +86,15 @@ export function SettingsPage() {
           <Field label="Địa chỉ">
             <TextInput value={s.address} onChange={(value) => saveSettings({ address: value })} />
           </Field>
-          <Field label="Số điện thoại">
+          <Field
+            label="Số Zalo / điện thoại chủ trọ"
+            hint="In trên phiếu để khách liên hệ. Khi gửi Zalo, tin nhắn vẫn đi từ tài khoản Zalo đang đăng nhập trên máy bạn."
+          >
             <TextInput
               value={s.phone}
               onChange={(value) => saveSettings({ phone: value })}
               inputMode="tel"
+              placeholder="0983285854"
             />
           </Field>
         </div>

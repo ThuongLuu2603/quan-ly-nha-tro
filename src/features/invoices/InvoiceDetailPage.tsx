@@ -14,7 +14,7 @@ import * as dt from '../../domain/dates'
 import { formatMoney } from '../../domain/money'
 import type { Invoice } from '../../domain/types'
 import { renderReceipt } from '../../receipt/renderReceipt'
-import { copyImageToClipboard, downloadBlob, shareImage, zaloChatUrl } from '../../receipt/share'
+import { copyImageToClipboard, downloadBlob, openZaloChat, shareImage } from '../../receipt/share'
 import { vietQRDataUrl } from '../../receipt/vietqr'
 import { Banner, Card, EmptyState, Pill, useToast } from '../../ui/components'
 import { Page } from '../../ui/Page'
@@ -126,14 +126,22 @@ export function InvoiceDetailPage() {
     toast(outcome === 'shared' ? 'Đã mở khay chia sẻ' : 'Máy không hỗ trợ chia sẻ, đã tải ảnh về')
   }
 
-  const openZalo = async () => {
+  const sendZaloToTenant = async () => {
     if (!primary?.phone) return
     if (blobRef.current) {
       const copied = await copyImageToClipboard(blobRef.current)
-      toast(copied ? 'Đã chép ảnh, dán vào khung chat Zalo' : 'Mở Zalo, ảnh cần gửi thủ công')
+      await markInvoiceSent(invoice.id)
+      openZaloChat(primary.phone)
+      toast(
+        copied
+          ? `Đã mở chat Zalo tới ${primary.fullName} — dán ảnh phiếu vào khung chat`
+          : `Đã mở chat Zalo tới ${primary.fullName} — gửi ảnh phiếu bằng nút Tải ảnh`,
+      )
+      return
     }
     await markInvoiceSent(invoice.id)
-    window.open(zaloChatUrl(primary.phone), '_blank', 'noopener')
+    openZaloChat(primary.phone)
+    toast(`Đã mở chat Zalo tới ${primary.fullName}`)
   }
 
   return (
@@ -187,14 +195,31 @@ export function InvoiceDetailPage() {
 
       <Card title="Gửi cho khách">
         <div className="stack tight">
-          <button className="btn primary block" onClick={share} disabled={!imageUrl || rendering}>
-            {rendering ? 'Đang dựng ảnh phiếu...' : 'Gửi Zalo (chia sẻ ảnh phiếu)'}
+          {primary?.phone ? (
+            <button
+              className="btn primary block"
+              onClick={sendZaloToTenant}
+              disabled={!imageUrl || rendering}
+            >
+              {rendering
+                ? 'Đang dựng ảnh phiếu...'
+                : `Gửi Zalo cho ${primary.fullName}`}
+            </button>
+          ) : (
+            <Banner tone="warn">
+              Chưa có số Zalo người đại diện. Vào hồ sơ người ở để thêm số điện thoại.
+            </Banner>
+          )}
+
+          <button className="btn block" onClick={share} disabled={!imageUrl || rendering}>
+            Chia sẻ ảnh phiếu (app khác)
           </button>
 
-          {primary?.phone && (
-            <button className="btn block" onClick={openZalo}>
-              Mở chat Zalo của {primary.fullName}
-            </button>
+          {data.settings.phone && (
+            <div className="tiny muted">
+              Tin nhắn gửi từ Zalo đang đăng nhập trên máy này. Số {data.settings.phone} trên phiếu
+              là số liên hệ chủ trọ — app không gửi tin thay bạn qua máy chủ Zalo.
+            </div>
           )}
 
           <button
