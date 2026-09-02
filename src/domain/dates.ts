@@ -137,6 +137,25 @@ export function formatPeriodShort(period: Period): string {
   return `T${pad(month)}/${year}`
 }
 
+/** Ky dien nuoc (luu DB) ↔ thang phieu ma chu tro hay goi. Phieu 01/09 → dien nuoc T08. */
+export function utilityPeriodForInvoiceMonth(invoiceMonth: Period): Period {
+  return prevPeriod(invoiceMonth)
+}
+
+export function invoiceMonthForUtilityPeriod(utilityPeriod: Period): Period {
+  return nextPeriod(utilityPeriod)
+}
+
+export function formatInvoiceMonthLabel(invoiceMonth: Period): string {
+  const { year, month } = periodParts(invoiceMonth)
+  return `phiếu tháng ${pad(month)}/${year}`
+}
+
+export function formatInvoiceMonthShort(invoiceMonth: Period): string {
+  const { year, month } = periodParts(invoiceMonth)
+  return `T${pad(month)}/${year}`
+}
+
 export function formatPeriodRange(period: Period): string {
   const { start, end } = periodBounds(period)
   return `${formatDateShort(start)} – ${formatDateShort(end)}`

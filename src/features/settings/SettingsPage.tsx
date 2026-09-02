@@ -234,8 +234,8 @@ export function SettingsPage() {
             đến 25/09.
           </div>
           <div>
-            Điện nước theo tháng dương lịch, phiếu phát trong tháng nào thì lấy số của tháng liền trước.
-            Tiền rác là khoản cố định mỗi kỳ (nếu đã nhập ở phòng).
+            Điện nước nhập theo <strong>tháng phiếu</strong> (vd: phiếu T09 = nhập số đồng hồ trước khi
+            phát phiếu 01/09). Tiền rác là khoản cố định mỗi kỳ (nếu đã nhập ở phòng).
           </div>
           <div>
             Khách vào giữa tháng thì thu tiền lẻ tới mốc kế tiếp rồi một kỳ tròn, các phiếu sau tự bỏ

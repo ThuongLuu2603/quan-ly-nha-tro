@@ -16,7 +16,7 @@ import { SettingsPage } from './features/settings/SettingsPage'
 
 const NAV = [
   { to: '/', label: 'Trang chủ', icon: '⌂' },
-  { to: '/chi-so', label: 'Chỉ số', icon: '⏱' },
+  { to: '/chi-so', label: 'Điện nước', icon: '⏱' },
   { to: '/phieu', label: 'Phiếu', icon: '🧾' },
   { to: '/phong', label: 'Phòng', icon: '🏠' },
   { to: '/cai-dat', label: 'Cài đặt', icon: '⚙' },

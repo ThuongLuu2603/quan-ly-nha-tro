@@ -143,7 +143,7 @@ describe('phieu thang', () => {
       readings: readingsToMap([]),
       carryOver: 0,
     })
-    expect(result.warnings.join(' ')).toContain('Chưa chốt số cuối')
+    expect(result.warnings.join(' ')).toContain('Chưa nhập điện nước cho phiếu tháng')
     expect(result.lines.some((l) => l.type === 'electric')).toBe(false)
   })
 })

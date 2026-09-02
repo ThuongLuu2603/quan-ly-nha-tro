@@ -101,7 +101,7 @@ export function IssuePage() {
             </div>
             <div className="tiny muted">
               {roomCollectsMeteredUtilities(item.room)
-                ? `Điện nước ${dt.formatPeriodMeterClose(item.preview.utilityPeriod)}`
+                ? `Điện nước kèm ${dt.formatInvoiceMonthLabel(dt.periodOf(item.issueDate))}`
                 : 'Chỉ thu tiền nhà'}
             </div>
             {item.preview.warnings.map((w) => (

@@ -49,13 +49,24 @@ export function HomePage() {
       .sort((a, b) => a.issueDate.localeCompare(b.issueDate))
   }, [data, now])
 
-  const utilityPeriod = dt.prevPeriod(thisPeriod)
-  const missingReadings = data.rooms.filter(
-    (room) =>
-      roomCollectsMeteredUtilities(room) &&
-      activeTenancy(data, room.id) &&
-      !readingOf(data, room.id, utilityPeriod),
-  )
+  const missingReadings = useMemo(() => {
+    return data.rooms.flatMap((room) => {
+      if (!roomCollectsMeteredUtilities(room)) return []
+      const tenancy = activeTenancy(data, room.id)
+      if (!tenancy) return []
+      const issueDate = nextIssueDateFor(data, tenancy, now)
+      if (dt.diffDays(now, issueDate) > 14) return []
+      const utilityPeriod = dt.prevPeriod(dt.periodOf(issueDate))
+      if (readingOf(data, room.id, utilityPeriod)) return []
+      return [
+        {
+          room,
+          issueDate,
+          invoiceMonth: dt.periodOf(issueDate),
+        },
+      ]
+    })
+  }, [data, now])
 
   const debtors = data.rooms
     .map((room) => {
@@ -109,9 +120,18 @@ export function HomePage() {
 
       {missingReadings.length > 0 && (
         <Banner tone="warn">
-          Còn {missingReadings.length} phòng chưa {dt.formatPeriodMeterClose(utilityPeriod)}:{' '}
-          {missingReadings.map((r) => r.name).join(', ')}.{' '}
-          <Link to="/chi-so" style={{ color: 'inherit', fontWeight: 700 }}>
+          {missingReadings.map((item, index) => (
+            <span key={item.room.id}>
+              {index > 0 ? ' · ' : ''}
+              <strong>{item.room.name}</strong> cần nhập điện nước trước{' '}
+              {dt.formatInvoiceMonthLabel(item.invoiceMonth)} ({dt.formatDate(item.issueDate)})
+            </span>
+          ))}
+          .{' '}
+          <Link
+            to={`/chi-so?phieu=${missingReadings[0].invoiceMonth}`}
+            style={{ color: 'inherit', fontWeight: 700 }}
+          >
             Nhập ngay
           </Link>
         </Banner>
@@ -170,7 +190,7 @@ export function HomePage() {
 
       <div className="row" style={{ gap: 10 }}>
         <Link className="btn grow" to="/chi-so">
-          Nhập chỉ số
+          Nhập điện nước
         </Link>
         <Link className="btn primary grow" to="/phat-phieu">
           Phát phiếu

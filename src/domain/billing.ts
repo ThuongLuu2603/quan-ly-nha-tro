@@ -181,10 +181,12 @@ export function buildMonthlyInvoice(input: {
     } else {
       const reading = readings.get(utilityPeriod)
       if (!reading) {
-        warnings.push(`Chưa chốt số cuối ${dt.formatPeriod(utilityPeriod)} cho phòng ${room.name}.`)
+        warnings.push(
+          `Chưa nhập điện nước cho ${dt.formatInvoiceMonthLabel(dt.invoiceMonthForUtilityPeriod(utilityPeriod))} (phòng ${room.name}).`,
+        )
       } else {
         const base = baselineFor(tenancy, readings, utilityPeriod)
-        const label = `${dt.formatPeriod(utilityPeriod)} (${dt.formatPeriodRange(utilityPeriod)})`
+        const label = dt.formatInvoiceMonthLabel(dt.invoiceMonthForUtilityPeriod(utilityPeriod))
         lines.push(
           ...utilityLines(room, label, base, {
             electric: reading.electricEnd,
