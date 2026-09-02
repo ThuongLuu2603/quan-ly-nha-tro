@@ -138,18 +138,38 @@ export function nextIssueDateFor(data: Dataset, tenancy: Tenancy, todayISO: stri
       .filter((i) => i.kind === 'monthly')
       .map((i) => i.issueDate),
   )
+  const moveInDates = new Set(
+    invoicesOfTenancy(data, tenancy.id)
+      .filter((i) => i.kind === 'moveIn')
+      .map((i) => i.issueDate),
+  )
   let candidate = dt.cycleDateInMonthOf(dt.addDays(todayISO, -45), tenancy.cycleDay)
   for (let i = 0; i < 24; i++) {
-    if (!issued.has(candidate) && candidate >= tenancy.startDate) return candidate
+    if (
+      !issued.has(candidate) &&
+      !moveInDates.has(candidate) &&
+      candidate >= tenancy.startDate
+    ) {
+      return candidate
+    }
     candidate = dt.nextCycleStart(candidate, tenancy.cycleDay)
   }
   return dt.cycleDateInMonthOf(todayISO, tenancy.cycleDay)
 }
 
-export function invoiceStatusLabel(invoice: Invoice): string {
+/** Phieu thang da gom no tu phieu nay (neu co). */
+export function invoiceAbsorbedBy(data: Dataset, invoice: Invoice): Invoice | undefined {
+  const carried = invoice.payments.find((p) => p.method === 'carried' && p.carriedTo)
+  if (!carried?.carriedTo) return undefined
+  return data.invoices.find((i) => i.id === carried.carriedTo)
+}
+
+export function invoiceStatusLabel(invoice: Invoice, absorbedByCode?: string): string {
   const status = statusOf(invoice)
   if (status === 'paid') {
-    if (wasCarriedForward(invoice)) return 'Nợ đã dồn sang phiếu sau'
+    if (wasCarriedForward(invoice)) {
+      return absorbedByCode ? `Đã gộp vào ${absorbedByCode}` : 'Đã gộp vào phiếu sau'
+    }
     return invoice.total < 0 ? 'Đã trả khách' : 'Đã thu'
   }
   if (status === 'partial') return 'Thu một phần'

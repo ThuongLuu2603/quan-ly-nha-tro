@@ -104,6 +104,11 @@ export function IssuePage() {
                 ? `Điện nước kèm ${dt.formatInvoiceMonthLabel(dt.periodOf(item.issueDate))}`
                 : 'Chỉ thu tiền nhà'}
             </div>
+            {item.preview.lines.some((l) => l.type === 'carryOver') && (
+              <div className="tiny" style={{ color: 'var(--warn)' }}>
+                Có dòng nợ cũ — nên thu phiếu nhận phòng trước, tránh tạo 2 phiếu cùng ngày.
+              </div>
+            )}
             {item.preview.warnings.map((w) => (
               <div key={w} className="tiny" style={{ color: 'var(--warn)' }}>
                 {w}

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { deleteInvoice, markInvoiceSent, removePayment } from '../../data/actions'
 import {
   invoiceStatusLabel,
   invoicesOfTenancy,
+  invoiceAbsorbedBy,
   primaryTenant,
   tenantsOf,
 } from '../../data/selectors'
@@ -108,6 +109,7 @@ export function InvoiceDetailPage() {
   const remaining = outstandingOf(invoice)
   const status = statusOf(invoice)
   const carried = wasCarriedForward(invoice)
+  const absorbedBy = invoiceAbsorbedBy(data, invoice)
   const isRefund = invoice.total < 0
   const primary = primaryTenant(data, invoice.tenancyId)
   const note = transferNoteFor(room.name, invoice.issueDate)
@@ -142,7 +144,9 @@ export function InvoiceDetailPage() {
     >
       <div className="row wrap" style={{ marginBottom: 12, gap: 8 }}>
         {status === 'paid' && (
-          <Pill tone={carried ? 'muted' : 'ok'}>{invoiceStatusLabel(invoice)}</Pill>
+          <Pill tone={carried ? 'muted' : 'ok'}>
+            {invoiceStatusLabel(invoice, absorbedBy?.code)}
+          </Pill>
         )}
         {status === 'partial' && <Pill tone="warn">Thu một phần</Pill>}
         {status === 'unpaid' && <Pill tone="danger">{isRefund ? 'Chưa trả khách' : 'Chưa thu'}</Pill>}
@@ -228,8 +232,15 @@ export function InvoiceDetailPage() {
       >
         {carried && (
           <Banner tone="info">
-            Khoản còn nợ của phiếu này đã được cộng vào phiếu kỳ sau nên không tính trùng ở mục còn
-            phải thu.
+            Phiếu này không cần gửi hay thu thêm — khoản tiền đã được gộp vào{' '}
+            {absorbedBy ? (
+              <Link to={`/phieu/${absorbedBy.id}`} style={{ fontWeight: 700 }}>
+                {absorbedBy.code}
+              </Link>
+            ) : (
+              'phiếu tháng sau'
+            )}
+            .
           </Banner>
         )}
 

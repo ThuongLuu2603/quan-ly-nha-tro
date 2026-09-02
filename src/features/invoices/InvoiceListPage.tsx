@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { invoiceStatusLabel } from '../../data/selectors'
+import { invoiceStatusLabel, invoiceAbsorbedBy } from '../../data/selectors'
 import { useDataset } from '../../data/store'
-import { outstandingOf, statusOf } from '../../domain/billing'
+import { outstandingOf, statusOf, wasCarriedForward } from '../../domain/billing'
 import * as dt from '../../domain/dates'
 import { formatMoney } from '../../domain/money'
 import { Card, EmptyState, Pill } from '../../ui/components'
@@ -25,11 +25,13 @@ export function InvoiceListPage() {
     [data.rooms],
   )
 
-  const invoices = data.invoices.filter((invoice) => {
-    if (filter === 'unpaid') return statusOf(invoice) !== 'paid'
-    if (filter === 'unsent') return !invoice.sentAt
-    return true
-  })
+  const invoices = data.invoices
+    .filter((invoice) => {
+      if (filter === 'unpaid') return statusOf(invoice) !== 'paid'
+      if (filter === 'unsent') return !invoice.sentAt && !wasCarriedForward(invoice)
+      return true
+    })
+    .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.createdAt.localeCompare(a.createdAt))
 
   const totalOutstanding = data.invoices.reduce((acc, invoice) => {
     const remaining = outstandingOf(invoice)
@@ -65,6 +67,8 @@ export function InvoiceListPage() {
           {invoices.map((invoice) => {
             const remaining = outstandingOf(invoice)
             const status = statusOf(invoice)
+            const absorbedBy = invoiceAbsorbedBy(data, invoice)
+            const archived = wasCarriedForward(invoice)
             return (
               <Link className="list-item" key={invoice.id} to={`/phieu/${invoice.id}`}>
                 <div className="row between">
@@ -75,14 +79,18 @@ export function InvoiceListPage() {
                       </span>
                       {invoice.kind === 'moveIn' && <Pill tone="accent">Nhận phòng</Pill>}
                       {invoice.kind === 'checkout' && <Pill tone="warn">Tất toán</Pill>}
-                      {!invoice.sentAt && <Pill tone="muted">Chưa gửi</Pill>}
+                      {!invoice.sentAt && !archived && <Pill tone="muted">Chưa gửi</Pill>}
+                      {archived && <Pill tone="muted">Đã gộp</Pill>}
                     </div>
                     <div className="tiny muted" style={{ marginTop: 3 }}>
-                      {dt.formatDate(invoice.issueDate)} · {invoiceStatusLabel(invoice)}
+                      {dt.formatDate(invoice.issueDate)} ·{' '}
+                      {invoiceStatusLabel(invoice, absorbedBy?.code)}
                     </div>
                   </div>
                   <div className="right">
-                    <div className="num strong">{formatMoney(Math.abs(invoice.total))} đ</div>
+                    <div className="num strong" style={archived ? { opacity: 0.55 } : undefined}>
+                      {formatMoney(Math.abs(invoice.total))} đ
+                    </div>
                     {status !== 'paid' && Math.abs(remaining) >= 1 && (
                       <div className="tiny" style={{ color: 'var(--danger)' }}>
                         còn {formatMoney(Math.abs(remaining))} đ
