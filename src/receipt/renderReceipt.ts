@@ -136,7 +136,7 @@ export async function renderReceipt(data: ReceiptData): Promise<Blob> {
 
   divider()
 
-  text(`Phòng ${room.name}`, { size: 24, weight: '700' })
+  text(room.name, { size: 24, weight: '700' })
   if (occupants.length) {
     text(occupants.join(', '), { size: 18, color: MUTED })
     if (occupants.length > 1) text(`${occupants.length} người lưu trú`, { size: 15, color: MUTED })
