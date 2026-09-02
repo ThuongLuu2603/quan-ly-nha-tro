@@ -8,6 +8,7 @@ import type { RemoteSyncRecord, SyncEntityType, SyncStatus } from './types'
 type StatusListener = (status: SyncStatus, detail?: string) => void
 
 let syncing = false
+let syncQueued = false
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 const listeners = new Set<StatusListener>()
 let realtimeUserId: string | null = null
@@ -20,6 +21,27 @@ export function onSyncStatus(listener: StatusListener): () => void {
 
 function notify(status: SyncStatus, detail?: string): void {
   for (const listener of listeners) listener(status, detail)
+}
+
+export interface SyncDiagnostics {
+  localRooms: number
+  cloudRooms: number
+  pendingOutbox: number
+}
+
+export async function getSyncDiagnostics(): Promise<SyncDiagnostics | null> {
+  const supabase = getSupabase()
+  if (!supabase) return null
+  const { data: auth } = await supabase.auth.getSession()
+  if (!auth.session) return null
+
+  const [localRooms, pendingOutbox, cloudRooms] = await Promise.all([
+    db.rooms.count(),
+    db.syncOutbox.count(),
+    countCloudEntities(auth.session.user.id, 'room'),
+  ])
+
+  return { localRooms, cloudRooms, pendingOutbox }
 }
 
 export function scheduleSync(delayMs = 1500): void {
@@ -59,7 +81,11 @@ interface RunSyncOptions {
 
 export async function runSync(options: RunSyncOptions = {}): Promise<void> {
   const supabase = getSupabase()
-  if (!supabase || syncing) return
+  if (!supabase) return
+  if (syncing) {
+    syncQueued = true
+    return
+  }
 
   const { data: auth } = await supabase.auth.getSession()
   if (!auth.session) return
@@ -75,7 +101,14 @@ export async function runSync(options: RunSyncOptions = {}): Promise<void> {
   try {
     await pushMissingLocal(auth.session.user.id)
     await pushOutbox(auth.session.user.id)
-    if (options.fullPull) {
+
+    const [localRooms, cloudRooms] = await Promise.all([
+      db.rooms.count(),
+      countCloudEntities(auth.session.user.id, 'room'),
+    ])
+    const needFullPull = options.fullPull || localRooms !== cloudRooms
+
+    if (needFullPull) {
       await setLastPullAt('1970-01-01T00:00:00.000Z')
     }
     await pullRemote(auth.session.user.id)
@@ -85,23 +118,16 @@ export async function runSync(options: RunSyncOptions = {}): Promise<void> {
     notify('error', message)
   } finally {
     syncing = false
+    if (syncQueued) {
+      syncQueued = false
+      void runSync(options)
+    }
   }
 }
 
 /** Day nhung ban ghi chi co tren may nay len cloud, khong ghi de du lieu da co. */
 async function pushMissingLocal(userId: string): Promise<void> {
-  const supabase = getSupabase()
-  if (!supabase) return
-
-  const { data: remote, error } = await supabase
-    .from('sync_records')
-    .select('entity_type, entity_id')
-    .eq('user_id', userId)
-    .eq('deleted', false)
-
-  if (error) throw error
-
-  const remoteKeys = new Set((remote ?? []).map((row) => `${row.entity_type}:${row.entity_id}`))
+  const remoteKeys = await fetchRemoteKeys(userId)
 
   const [rooms, tenancies, tenants, readings, invoices, settings] = await Promise.all([
     db.rooms.toArray(),
@@ -156,21 +182,11 @@ async function pushOutbox(userId: string): Promise<void> {
 }
 
 async function pullRemote(userId: string): Promise<void> {
-  const supabase = getSupabase()
-  if (!supabase) return
-
   const since = (await getLastPullAt()) ?? '1970-01-01T00:00:00.000Z'
-  const { data, error } = await supabase
-    .from('sync_records')
-    .select('*')
-    .eq('user_id', userId)
-    .gt('updated_at', since)
-    .order('updated_at', { ascending: true })
-
-  if (error) throw error
+  const rows = await fetchRemoteRecords(userId, since)
 
   let latest = since
-  for (const row of (data ?? []) as RemoteSyncRecord[]) {
+  for (const row of rows) {
     const local = await db.syncOutbox.get(`${row.entity_type}:${row.entity_id}`)
     if (local && local.updatedAt > row.updated_at) {
       latest = row.updated_at > latest ? row.updated_at : latest
@@ -180,9 +196,79 @@ async function pullRemote(userId: string): Promise<void> {
     latest = row.updated_at > latest ? row.updated_at : latest
   }
 
-  if ((data ?? []).length > 0) {
+  if (rows.length > 0) {
     await setLastPullAt(latest)
   }
+}
+
+const REMOTE_PAGE_SIZE = 500
+
+async function countCloudEntities(userId: string, entityType: SyncEntityType): Promise<number> {
+  const supabase = getSupabase()
+  if (!supabase) return 0
+
+  const { count, error } = await supabase
+    .from('sync_records')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('entity_type', entityType)
+    .eq('deleted', false)
+
+  if (error) throw error
+  return count ?? 0
+}
+
+async function fetchRemoteKeys(userId: string): Promise<Set<string>> {
+  const supabase = getSupabase()
+  if (!supabase) return new Set()
+
+  const keys = new Set<string>()
+  let from = 0
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('sync_records')
+      .select('entity_type, entity_id')
+      .eq('user_id', userId)
+      .eq('deleted', false)
+      .range(from, from + REMOTE_PAGE_SIZE - 1)
+
+    if (error) throw error
+    if (!data?.length) break
+
+    for (const row of data) keys.add(`${row.entity_type}:${row.entity_id}`)
+    if (data.length < REMOTE_PAGE_SIZE) break
+    from += REMOTE_PAGE_SIZE
+  }
+
+  return keys
+}
+
+async function fetchRemoteRecords(userId: string, since: string): Promise<RemoteSyncRecord[]> {
+  const supabase = getSupabase()
+  if (!supabase) return []
+
+  const rows: RemoteSyncRecord[] = []
+  let from = 0
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('sync_records')
+      .select('*')
+      .eq('user_id', userId)
+      .gt('updated_at', since)
+      .order('updated_at', { ascending: true })
+      .range(from, from + REMOTE_PAGE_SIZE - 1)
+
+    if (error) throw error
+    if (!data?.length) break
+
+    rows.push(...(data as RemoteSyncRecord[]))
+    if (data.length < REMOTE_PAGE_SIZE) break
+    from += REMOTE_PAGE_SIZE
+  }
+
+  return rows
 }
 
 /** Day toan bo du lieu local len cloud (sau khi nhap backup hoac lan dau dang nhap). */

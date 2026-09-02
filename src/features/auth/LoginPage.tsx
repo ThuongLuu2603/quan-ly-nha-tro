@@ -32,7 +32,8 @@ export function LoginPage() {
     <Page title="Đăng nhập đồng bộ" subtitle="Một tài khoản — dùng chung trên mọi điện thoại">
       <Banner tone="info">
         Dữ liệu vẫn lưu trên máy để dùng offline. Khi có mạng, app tự đồng bộ lên cloud và máy khác
-        sẽ nhận được.
+        sẽ nhận được. Trên mọi máy hãy dùng <strong>cùng một cách đăng nhập</strong> (chỉ Google, hoặc
+        chỉ email+mật khẩu) — đăng nhập khác kiểu dù cùng email vẫn là hai tài khoản cloud khác nhau.
       </Banner>
 
       <div className="card stack">

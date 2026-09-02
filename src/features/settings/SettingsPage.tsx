@@ -8,6 +8,7 @@ import { today } from '../../domain/dates'
 import { downloadBlob } from '../../receipt/share'
 import { buildVietQRPayload } from '../../receipt/vietqr'
 import { useAuth } from '../../sync/AuthProvider'
+import { getSyncDiagnostics, pushAllLocal, type SyncDiagnostics } from '../../sync/engine'
 import {
   Banner,
   Card,
@@ -26,16 +27,19 @@ export function SettingsPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
   const [pendingSync, setPendingSync] = useState(0)
+  const [syncStats, setSyncStats] = useState<SyncDiagnostics | null>(null)
+  const [pushing, setPushing] = useState(false)
 
-  const refreshPendingSync = () => {
+  const refreshSyncStats = () => {
     void db.syncOutbox.count().then(setPendingSync)
+    void getSyncDiagnostics().then(setSyncStats)
   }
 
   const s = data.settings
   const qrReady = Boolean(s.bankBin && s.bankAccountNo)
 
   useEffect(() => {
-    refreshPendingSync()
+    refreshSyncStats()
   }, [data.rooms.length, data.invoices.length])
 
   const doExport = async () => {
@@ -72,24 +76,68 @@ export function SettingsPage() {
           <div className="stack tight">
             <div className="small muted">Đang đăng nhập: {user.email}</div>
             <div className="small muted">
-              Máy này: {data.rooms.length} phòng · {data.invoices.length} phiếu
+              Máy này: <strong>{data.rooms.length}</strong> phòng · {data.invoices.length} phiếu
               {pendingSync > 0 ? ` · ${pendingSync} thay đổi chờ đẩy lên` : ''}
             </div>
             <div className="small muted">
-              Cùng tài khoản + cùng địa chỉ <strong>qlnt.marchluu.io.vn</strong> mới thấy giống nhau.
-              Mỗi máy lưu tạm trên máy, cần mạng để đồng bộ.
+              Trên cloud:{' '}
+              <strong>{syncStats ? syncStats.cloudRooms : '…'}</strong> phòng
+              {syncStats && syncStats.localRooms !== syncStats.cloudRooms && (
+                <span style={{ color: 'var(--warn)' }}> — chưa khớp</span>
+              )}
+            </div>
+            {syncStats && syncStats.localRooms > syncStats.cloudRooms && (
+              <Banner tone="warn">
+                Máy này có nhiều phòng hơn cloud ({syncStats.localRooms} vs {syncStats.cloudRooms}).
+                Bấm <strong>Đẩy dữ liệu lên cloud</strong> trên máy tính (máy có đủ 17 phòng).
+              </Banner>
+            )}
+            {syncStats && syncStats.localRooms < syncStats.cloudRooms && (
+              <Banner tone="info">
+                Cloud có {syncStats.cloudRooms - syncStats.localRooms} phòng mà máy này chưa có.
+                Bấm <strong>Đồng bộ ngay</strong> để tải về.
+              </Banner>
+            )}
+            <div className="small muted">
+              Dùng cùng cách đăng nhập (Google hoặc email) trên mọi máy. Cùng địa chỉ{' '}
+              <strong>qlnt.marchluu.io.vn</strong>.
             </div>
             <button
               className="btn block"
               onClick={() =>
                 void syncNow().then(() => {
-                  refreshPendingSync()
+                  refreshSyncStats()
                   toast('Đã đồng bộ hai chiều')
                 })
               }
             >
               Đồng bộ ngay
             </button>
+            {syncStats && syncStats.localRooms > syncStats.cloudRooms && (
+              <button
+                className="btn block"
+                disabled={pushing}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      `Đẩy toàn bộ ${syncStats.localRooms} phòng từ máy này lên cloud? Dữ liệu cloud sẽ được cập nhật theo máy này.`,
+                    )
+                  ) {
+                    return
+                  }
+                  setPushing(true)
+                  void pushAllLocal()
+                    .then(() => {
+                      refreshSyncStats()
+                      toast('Đã đẩy dữ liệu lên cloud')
+                    })
+                    .catch(() => toast('Không đẩy được — kiểm tra mạng'))
+                    .finally(() => setPushing(false))
+                }}
+              >
+                {pushing ? 'Đang đẩy...' : 'Đẩy dữ liệu lên cloud'}
+              </button>
+            )}
             <button className="btn ghost block" onClick={() => void signOut()}>
               Đăng xuất
             </button>
