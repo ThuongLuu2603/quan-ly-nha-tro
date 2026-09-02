@@ -7,12 +7,12 @@ const LABEL: Record<SyncStatus, string> = {
   idle: '',
   syncing: 'Đang đồng bộ...',
   ok: 'Đã đồng bộ',
-  offline: 'Offline — sẽ đồng bộ khi có mạng',
+  offline: 'Offline — chỉ xem, không lưu được',
   error: 'Lỗi đồng bộ',
 }
 
 export function SyncBar() {
-  const { configured, session, syncNow } = useAuth()
+  const { configured, session, online, syncNow } = useAuth()
   const [status, setStatus] = useState<SyncStatus>('idle')
   const [detail, setDetail] = useState<string | undefined>()
 
@@ -25,6 +25,15 @@ export function SyncBar() {
   }, [configured, session])
 
   if (!configured || !session) return null
+
+  if (!online) {
+    return (
+      <div className="sync-bar warn">
+        <span>Offline — chỉ xem dữ liệu đã tải, không lưu/xóa được</span>
+      </div>
+    )
+  }
+
   if (status === 'idle') return null
 
   const tone =

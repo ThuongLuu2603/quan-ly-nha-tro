@@ -27,6 +27,8 @@ import {
 interface AuthContextValue {
   configured: boolean
   loading: boolean
+  online: boolean
+  canEdit: boolean
   session: Session | null
   user: User | null
   signInEmail: (email: string, password: string) => Promise<string | null>
@@ -98,7 +100,20 @@ function bindAuthListeners(
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [configured, setConfigured] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [online, setOnline] = useState(() => navigator.onLine)
   const [session, setSession] = useState<Session | null>(null)
+
+  useEffect(() => {
+    const onStatus = () => setOnline(navigator.onLine)
+    window.addEventListener('online', onStatus)
+    window.addEventListener('offline', onStatus)
+    return () => {
+      window.removeEventListener('online', onStatus)
+      window.removeEventListener('offline', onStatus)
+    }
+  }, [])
+
+  const canEdit = configured && !!session && online
 
   const refreshConfig = useCallback(async () => {
     setLoading(true)
@@ -176,6 +191,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       configured,
       loading,
+      online,
+      canEdit,
       session,
       user: session?.user ?? null,
       signInEmail,
@@ -188,6 +205,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       configured,
       loading,
+      online,
+      canEdit,
       session,
       signInEmail,
       signUpEmail,

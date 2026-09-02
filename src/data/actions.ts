@@ -22,6 +22,8 @@ import type {
 } from '../domain/types'
 import { db, newId } from './db'
 import { initSupabaseFromDb } from '../sync/supabase'
+import { syncAfterMutation } from '../sync/engine'
+import { assertCanMutate } from '../sync/mutation'
 import {
   billedUtilityPeriods,
   carryOverOf,
@@ -74,35 +76,45 @@ async function undoCarriedForward(targetInvoiceId: ID): Promise<void> {
 }
 
 export async function saveSettings(patch: Partial<Settings>): Promise<void> {
+  const bootstrap = 'supabaseUrl' in patch || 'supabaseAnonKey' in patch
+  if (!bootstrap) assertCanMutate()
   const current = await db.settings.get('app')
   if (!current) return
   await db.settings.put({ ...current, ...patch, id: 'app' })
   if ('supabaseUrl' in patch || 'supabaseAnonKey' in patch) {
     await initSupabaseFromDb()
   }
+  if (!bootstrap) await syncAfterMutation()
 }
 
 export async function saveRoom(room: Room): Promise<void> {
+  assertCanMutate()
   await db.rooms.put(room)
+  await syncAfterMutation()
 }
 
 export async function reorderRooms(orderedIds: ID[]): Promise<void> {
+  assertCanMutate()
   await db.transaction('rw', db.rooms, async () => {
     for (let i = 0; i < orderedIds.length; i++) {
       const room = await db.rooms.get(orderedIds[i])
       if (room) await db.rooms.put({ ...room, order: i + 1 })
     }
   })
+  await syncAfterMutation()
 }
 
 export async function createRoom(input: Omit<Room, 'id' | 'order'> & { order?: number }): Promise<ID> {
+  assertCanMutate()
   const count = await db.rooms.count()
   const room: Room = { ...input, id: newId(), order: input.order ?? count + 1 }
   await db.rooms.put(room)
+  await syncAfterMutation()
   return room.id
 }
 
 export async function deleteRoom(roomId: ID): Promise<void> {
+  assertCanMutate()
   const tenancies = await db.tenancies.where('roomId').equals(roomId).toArray()
   const tenancyIds = tenancies.map((t) => t.id)
   await db.transaction('rw', db.rooms, db.tenancies, db.tenants, db.readings, db.invoices, async () => {
@@ -112,6 +124,7 @@ export async function deleteRoom(roomId: ID): Promise<void> {
     await db.tenancies.where('roomId').equals(roomId).delete()
     await db.rooms.delete(roomId)
   })
+  await syncAfterMutation()
 }
 
 export async function saveReading(input: {
@@ -121,6 +134,7 @@ export async function saveReading(input: {
   waterEnd: number
   readAt?: ISODate
 }): Promise<void> {
+  assertCanMutate()
   await db.readings.put({
     id: `${input.roomId}:${input.period}`,
     roomId: input.roomId,
@@ -129,10 +143,13 @@ export async function saveReading(input: {
     waterEnd: input.waterEnd,
     readAt: input.readAt ?? dt.today(),
   })
+  await syncAfterMutation()
 }
 
 export async function deleteReading(roomId: ID, period: Period): Promise<void> {
+  assertCanMutate()
   await db.readings.delete(`${roomId}:${period}`)
+  await syncAfterMutation()
 }
 
 export interface MoveInInput {
@@ -151,6 +168,7 @@ export interface MoveInInput {
 }
 
 export async function moveIn(input: MoveInInput): Promise<ID> {
+  assertCanMutate()
   const build = buildMoveInInvoice({
     rent: input.rent,
     deposit: input.deposit,
@@ -206,14 +224,18 @@ export async function moveIn(input: MoveInInput): Promise<ID> {
     await db.invoices.put(invoice)
   })
 
+  await syncAfterMutation()
   return invoice.id
 }
 
 export async function saveTenant(tenant: Tenant): Promise<void> {
+  assertCanMutate()
   await db.tenants.put(tenant)
+  await syncAfterMutation()
 }
 
 export async function addTenant(tenancyId: ID, fullName: string): Promise<void> {
+  assertCanMutate()
   const existing = await db.tenants.where('tenancyId').equals(tenancyId).count()
   await db.tenants.put({
     id: newId(),
@@ -221,16 +243,21 @@ export async function addTenant(tenancyId: ID, fullName: string): Promise<void> 
     fullName,
     isPrimary: existing === 0,
   })
+  await syncAfterMutation()
 }
 
 export async function deleteTenant(tenantId: ID): Promise<void> {
+  assertCanMutate()
   await db.tenants.delete(tenantId)
+  await syncAfterMutation()
 }
 
 export async function updateTenancy(tenancyId: ID, patch: Partial<Tenancy>): Promise<void> {
+  assertCanMutate()
   const current = await db.tenancies.get(tenancyId)
   if (!current) return
   await db.tenancies.put({ ...current, ...patch })
+  await syncAfterMutation()
 }
 
 export interface AdjustTenancyInput {
@@ -249,6 +276,7 @@ export interface AdjustTenancyInput {
  * Gia moi ap dung tu ky chua thu (rentPaidThrough). Coc tang co the tao phieu thu.
  */
 export async function adjustTenancy(input: AdjustTenancyInput): Promise<ID | null> {
+  assertCanMutate()
   const { room, tenancy, rent, deposit, note } = input
   const depositIncrease = Math.max(0, deposit - tenancy.deposit)
   const issueDepositInvoice = input.issueDepositInvoice !== false && depositIncrease > 0
@@ -288,6 +316,7 @@ export async function adjustTenancy(input: AdjustTenancyInput): Promise<ID | nul
     }
   })
 
+  await syncAfterMutation()
   return invoiceId
 }
 
@@ -312,6 +341,7 @@ export function previewMonthly(input: IssueMonthlyInput) {
 }
 
 export async function issueMonthlyInvoice(input: IssueMonthlyInput): Promise<ID> {
+  assertCanMutate()
   const build = previewMonthly(input)
   const sources = outstandingInvoicesOf(input.data, input.tenancy.id).map((item) => ({
     invoiceId: item.invoice.id,
@@ -341,6 +371,7 @@ export async function issueMonthlyInvoice(input: IssueMonthlyInput): Promise<ID>
     await markCarriedForward(sources, invoice.id, invoice.code)
   })
 
+  await syncAfterMutation()
   return invoice.id
 }
 
@@ -370,6 +401,7 @@ export function previewCheckout(input: CheckoutInput) {
 }
 
 export async function checkout(input: CheckoutInput): Promise<ID> {
+  assertCanMutate()
   const build = previewCheckout(input)
   const sources = outstandingInvoicesOf(input.data, input.tenancy.id).map((item) => ({
     invoiceId: item.invoice.id,
@@ -407,6 +439,7 @@ export async function checkout(input: CheckoutInput): Promise<ID> {
     })
   })
 
+  await syncAfterMutation()
   return invoice.id
 }
 
@@ -414,6 +447,7 @@ export async function addPayment(
   invoiceId: ID,
   payment: { amount: number; method: PaymentMethod; date?: ISODate; note?: string },
 ): Promise<void> {
+  assertCanMutate()
   const invoice = await db.invoices.get(invoiceId)
   if (!invoice) return
   const row: Payment = {
@@ -424,33 +458,41 @@ export async function addPayment(
     note: payment.note,
   }
   await db.invoices.put({ ...invoice, payments: [...invoice.payments, row] })
+  await syncAfterMutation()
 }
 
 export async function removePayment(invoiceId: ID, paymentId: ID): Promise<void> {
+  assertCanMutate()
   const invoice = await db.invoices.get(invoiceId)
   if (!invoice) return
   await db.invoices.put({
     ...invoice,
     payments: invoice.payments.filter((p) => p.id !== paymentId),
   })
+  await syncAfterMutation()
 }
 
 export async function markInvoiceSent(invoiceId: ID): Promise<void> {
+  assertCanMutate()
   const invoice = await db.invoices.get(invoiceId)
   if (!invoice) return
   await db.invoices.put({ ...invoice, sentAt: new Date().toISOString() })
+  await syncAfterMutation()
 }
 
 export async function updateInvoiceLines(invoiceId: ID, lines: InvoiceLine[]): Promise<void> {
+  assertCanMutate()
   const invoice = await db.invoices.get(invoiceId)
   if (!invoice) return
   await db.invoices.put({ ...invoice, lines, total: sumLines(lines) })
+  await syncAfterMutation()
 }
 
 /**
  * Xoa phieu, tra lai moc da tra tien phong va tra lai khoan no ve phieu goc.
  */
 export async function deleteInvoice(invoiceId: ID): Promise<void> {
+  assertCanMutate()
   const invoice = await db.invoices.get(invoiceId)
   if (!invoice) return
   await db.transaction('rw', db.invoices, db.tenancies, async () => {
@@ -472,6 +514,7 @@ export async function deleteInvoice(invoiceId: ID): Promise<void> {
     await undoCarriedForward(invoiceId)
     await db.invoices.delete(invoiceId)
   })
+  await syncAfterMutation()
 }
 
 export function occupantNames(data: Dataset, tenancyId: ID | undefined): string {

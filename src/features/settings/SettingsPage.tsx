@@ -99,8 +99,8 @@ export function SettingsPage() {
               </Banner>
             )}
             <div className="small muted">
-              Dùng cùng cách đăng nhập (Google hoặc email) trên mọi máy. Cùng địa chỉ{' '}
-              <strong>qlnt.marchluu.io.vn</strong>.
+              Dùng cùng cách đăng nhập trên mọi máy. Cần <strong>mạng</strong> để lưu/xóa — offline chỉ
+              xem. Cùng địa chỉ <strong>qlnt.marchluu.io.vn</strong>.
             </div>
             <button
               className="btn block"

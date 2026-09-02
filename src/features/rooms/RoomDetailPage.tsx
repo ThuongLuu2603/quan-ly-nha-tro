@@ -15,8 +15,10 @@ import { outstandingOf, roomCollectsMeteredUtilities } from '../../domain/billin
 import * as dt from '../../domain/dates'
 import { formatMoney } from '../../domain/money'
 import type { Tenant } from '../../domain/types'
-import { Card, EmptyState, Pill } from '../../ui/components'
+import { Card, EmptyState, Pill, useToast } from '../../ui/components'
 import { Page } from '../../ui/Page'
+import { useAuth } from '../../sync/AuthProvider'
+import { OfflineReadOnlyError } from '../../sync/mutation'
 import { RoomFormSheet } from './RoomFormSheet'
 import { TenantSheet } from './TenantSheet'
 import { TenancyAdjustSheet } from '../tenancy/TenancyAdjustSheet'
@@ -24,6 +26,8 @@ import { TenancyAdjustSheet } from '../tenancy/TenancyAdjustSheet'
 export function RoomDetailPage() {
   const { roomId } = useParams()
   const navigate = useNavigate()
+  const { canEdit } = useAuth()
+  const { toast, toastNode } = useToast()
   const data = useDataset()
   const [editing, setEditing] = useState(false)
   const [adjustingTenancy, setAdjustingTenancy] = useState(false)
@@ -268,18 +272,27 @@ export function RoomDetailPage() {
           ))}
         </div>
         <div className="row" style={{ marginTop: 14, gap: 8 }}>
-          <button className="btn grow" onClick={() => setEditing(true)}>
+          <button className="btn grow" onClick={() => setEditing(true)} disabled={!canEdit}>
             Sửa phòng
           </button>
           <button
             className="btn danger"
+            disabled={!canEdit}
             onClick={async () => {
               const ok = window.confirm(
                 `Xoá phòng ${room.name} cùng toàn bộ lượt thuê, chỉ số và phiếu của phòng này?`,
               )
               if (!ok) return
-              await deleteRoom(room.id)
-              navigate('/phong')
+              try {
+                await deleteRoom(room.id)
+                navigate('/phong')
+              } catch (error) {
+                toast(
+                  error instanceof OfflineReadOnlyError
+                    ? error.message
+                    : 'Không xóa được — thử Đồng bộ ngay trong Cài đặt',
+                )
+              }
             }}
           >
             Xoá
@@ -307,6 +320,7 @@ export function RoomDetailPage() {
           onClose={() => setTenantSheet(null)}
         />
       )}
+      {toastNode}
     </Page>
   )
 }

@@ -74,6 +74,11 @@ export async function maybeSeedCloud(): Promise<void> {
   await pushMissingLocal(auth.session.user.id)
 }
 
+export async function syncAfterMutation(): Promise<void> {
+  if (!navigator.onLine) return
+  await runSync()
+}
+
 interface RunSyncOptions {
   /** Keo lai toan bo ban ghi tu cloud — dung khi bam "Dong bo ngay". */
   fullPull?: boolean
@@ -99,7 +104,6 @@ export async function runSync(options: RunSyncOptions = {}): Promise<void> {
   notify('syncing')
 
   try {
-    await pushMissingLocal(auth.session.user.id)
     await pushOutbox(auth.session.user.id)
 
     const [localRooms, cloudRooms] = await Promise.all([
@@ -144,6 +148,7 @@ async function pushMissingLocal(userId: string): Promise<void> {
     payload: unknown,
   ): Promise<void> => {
     const key = entityKey(entityType, entityId)
+    // Da co tren cloud (ke ca ban ghi da xoa) — khong day lai, tranh hoi sinh phong da xoa.
     if (remoteKeys.has(key) || (await db.syncOutbox.get(key))) return
     await queueSync(entityType, entityId, payload, false)
   }
@@ -230,7 +235,6 @@ async function fetchRemoteKeys(userId: string): Promise<Set<string>> {
       .from('sync_records')
       .select('entity_type, entity_id')
       .eq('user_id', userId)
-      .eq('deleted', false)
       .range(from, from + REMOTE_PAGE_SIZE - 1)
 
     if (error) throw error
