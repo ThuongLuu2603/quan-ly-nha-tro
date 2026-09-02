@@ -51,13 +51,22 @@ function bindAuthListeners(
     return () => undefined
   }
 
-  void supabase.auth.getSession().then(({ data }) => {
-    setSession(data.session)
-    setLoading(false)
-    if (data.session) {
-      void maybeSeedCloud().then(() => runSync())
-    }
-  })
+  const finishLoading = () => setLoading(false)
+  const timeout = window.setTimeout(finishLoading, 8_000)
+
+  void supabase.auth
+    .getSession()
+    .then(({ data }) => {
+      setSession(data.session)
+      if (data.session) {
+        void maybeSeedCloud().then(() => runSync())
+      }
+    })
+    .catch(() => setSession(null))
+    .finally(() => {
+      window.clearTimeout(timeout)
+      finishLoading()
+    })
 
   const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
     setSession(next)
@@ -86,16 +95,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshConfig = useCallback(async () => {
     setLoading(true)
-    const ok = await initSupabaseFromDb()
-    setConfigured(ok)
-    if (!ok) {
-      setLoading(false)
+    try {
+      const ok = await initSupabaseFromDb()
+      setConfigured(ok)
+      if (!ok) {
+        setSession(null)
+        setLoading(false)
+        return
+      }
+      if (!hooksInstalled) {
+        installSyncHooks()
+        hooksInstalled = true
+      }
+    } catch {
+      setConfigured(false)
       setSession(null)
-      return
-    }
-    if (!hooksInstalled) {
-      installSyncHooks()
-      hooksInstalled = true
+      setLoading(false)
     }
   }, [])
 
