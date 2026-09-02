@@ -164,6 +164,27 @@ export function invoiceAbsorbedBy(data: Dataset, invoice: Invoice): Invoice | un
   return data.invoices.find((i) => i.id === carried.carriedTo)
 }
 
+export function meterBaselineForTenancy(
+  data: Dataset,
+  roomId: ID,
+  tenancy: Tenancy,
+  utilityPeriod: Period,
+): { electric: number; water: number; label: string } {
+  const prev = readingOf(data, roomId, dt.prevPeriod(utilityPeriod))
+  if (prev && dt.periodOf(tenancy.startDate) < utilityPeriod) {
+    return {
+      electric: prev.electricEnd,
+      water: prev.waterEnd,
+      label: `lần trước (${dt.formatInvoiceMonthShort(dt.invoiceMonthForUtilityPeriod(dt.prevPeriod(utilityPeriod)))})`,
+    }
+  }
+  return {
+    electric: tenancy.electricStart,
+    water: tenancy.waterStart,
+    label: 'bàn giao',
+  }
+}
+
 export function invoiceStatusLabel(invoice: Invoice, absorbedByCode?: string): string {
   const status = statusOf(invoice)
   if (status === 'paid') {

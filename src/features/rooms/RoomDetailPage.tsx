@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { deleteRoom } from '../../data/actions'
 import {
   activeTenancy,
+  invoiceAbsorbedBy,
   invoiceStatusLabel,
   invoicesOfRoom,
+  meterBaselineForTenancy,
   readingsOfRoom,
   tenantsOf,
 } from '../../data/selectors'
@@ -37,7 +39,27 @@ export function RoomDetailPage() {
   const tenancy = activeTenancy(data, room.id)
   const tenants = tenantsOf(data, tenancy?.id)
   const invoices = invoicesOfRoom(data, room.id)
-  const readings = readingsOfRoom(data, room.id).slice(-6).reverse()
+
+  const meterHistory = useMemo(() => {
+    if (!tenancy || !roomCollectsMeteredUtilities(room)) return []
+    const startPeriod = dt.periodOf(tenancy.startDate)
+    return readingsOfRoom(data, room.id)
+      .filter((r) => r.period >= startPeriod)
+      .sort((a, b) => b.period.localeCompare(a.period))
+      .slice(0, 6)
+      .map((reading) => {
+        const base = meterBaselineForTenancy(data, room.id, tenancy, reading.period)
+        const kwh = Math.max(0, reading.electricEnd - base.electric)
+        const m3 = Math.max(0, reading.waterEnd - base.water)
+        return {
+          reading,
+          base,
+          kwh,
+          m3,
+          invoiceMonth: dt.invoiceMonthForUtilityPeriod(reading.period),
+        }
+      })
+  }, [data, room.id, tenancy])
 
   return (
     <Page title={`Phòng ${room.name}`} back="/phong" subtitle={room.note}>
@@ -127,22 +149,47 @@ export function RoomDetailPage() {
         </Card>
       )}
 
-      <Card title="Chỉ số điện nước gần đây">
-        {readings.length === 0 ? (
-          <div className="muted small">Chưa có chỉ số nào.</div>
-        ) : (
+      {tenancy && roomCollectsMeteredUtilities(room) && (
+        <Card
+          title="Điện nước gần đây"
+          action={
+            <Link className="btn ghost sm" to={`/chi-so?phieu=${dt.invoiceMonthForUtilityPeriod(dt.periodOf(tenancy.startDate))}`}>
+              Sửa
+            </Link>
+          }
+        >
           <div className="stack tight">
-            {readings.map((reading) => (
-              <div className="row between" key={reading.id}>
-                <span className="small muted">{dt.formatPeriod(reading.period)}</span>
-                <span className="num small">
-                  điện {reading.electricEnd} · nước {reading.waterEnd}
-                </span>
-              </div>
-            ))}
+            <div className="row between">
+              <span className="small muted">
+                Bàn giao {dt.formatDate(tenancy.startDate)}
+              </span>
+              <span className="num small">
+                điện {tenancy.electricStart} · nước {tenancy.waterStart}
+              </span>
+            </div>
+
+            {meterHistory.length === 0 ? (
+              <div className="muted small">Chưa nhập điện nước cho phiếu nào.</div>
+            ) : (
+              meterHistory.map((item) => (
+                <div className="row between" key={item.reading.id}>
+                  <span className="small">
+                    {dt.formatInvoiceMonthLabel(item.invoiceMonth)}
+                  </span>
+                  <div className="right">
+                    <div className="num small">
+                      điện {item.reading.electricEnd} · nước {item.reading.waterEnd}
+                    </div>
+                    <div className="tiny muted">
+                      +{item.kwh} kWh · +{item.m3} m³ (từ {item.base.label})
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
 
       <Card title={`Phiếu của phòng (${invoices.length})`} flush>
         {invoices.length === 0 ? (
@@ -157,7 +204,12 @@ export function RoomDetailPage() {
                 <div className="row between">
                   <div className="grow">
                     <div className="strong">{dt.formatDate(invoice.issueDate)}</div>
-                    <div className="tiny muted">{invoiceStatusLabel(invoice)}</div>
+                    <div className="tiny muted">
+                      {invoiceStatusLabel(
+                        invoice,
+                        invoiceAbsorbedBy(data, invoice)?.code,
+                      )}
+                    </div>
                   </div>
                   <div className="right">
                     <div className="num strong">{formatMoney(Math.abs(invoice.total))} đ</div>
