@@ -20,6 +20,7 @@ import type {
   Tenant,
 } from '../domain/types'
 import { db, newId } from './db'
+import { initSupabaseFromDb } from '../sync/supabase'
 import {
   billedUtilityPeriods,
   carryOverOf,
@@ -75,6 +76,9 @@ export async function saveSettings(patch: Partial<Settings>): Promise<void> {
   const current = await db.settings.get('app')
   if (!current) return
   await db.settings.put({ ...current, ...patch, id: 'app' })
+  if ('supabaseUrl' in patch || 'supabaseAnonKey' in patch) {
+    await initSupabaseFromDb()
+  }
 }
 
 export async function saveRoom(room: Room): Promise<void> {

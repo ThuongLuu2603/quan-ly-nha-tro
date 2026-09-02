@@ -1,6 +1,6 @@
 # Quản lý nhà trọ
 
-Ứng dụng web cài được lên màn hình chính điện thoại (PWA) để quản lý phòng trọ, chỉ số điện nước và phiếu thu tiền. Dữ liệu nằm hoàn toàn trong máy, không có máy chủ, dùng được cả khi mất mạng.
+Ứng dụng web cài được lên màn hình chính điện thoại (PWA) để quản lý phòng trọ, chỉ số điện nước và phiếu thu tiền. Dùng offline được; khi có mạng và đã đăng nhập thì dữ liệu tự đồng bộ giữa các điện thoại.
 
 ## Cài lên điện thoại Android
 
@@ -32,9 +32,25 @@ Tiền phòng chạy theo mốc ngày của từng phòng, tròn một tháng t�
 
 Ứng dụng ghi nhớ tiền phòng đã thu tới ngày nào nên không thu trùng. Khách đóng trước một tháng lúc dọn vào thì phiếu kế tiếp chỉ có điện nước.
 
+## Đồng bộ nhiều điện thoại (Supabase)
+
+1. Tạo project miễn phí tại [supabase.com](https://supabase.com).
+2. Vào **SQL Editor**, chạy file `supabase/migrations/001_sync_records.sql`.
+3. Vào **Authentication → Providers**: bật **Email** và **Google**.
+4. Vào **Authentication → URL Configuration**, thêm **Redirect URL**:
+   - `http://localhost:5173/` (dev)
+   - `https://thuongluu2603.github.io/quan-ly-nha-tro/` (bản public)
+5. Vào **Project Settings → API**, copy **Project URL** và **anon public key**.
+6. Tạo file `.env.local` trong thư mục project (xem `.env.example`).
+7. Deploy GitHub Pages: vào repo **Settings → Secrets → Actions**, thêm:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+
+Cùng một tài khoản đăng nhập trên mọi máy sẽ thấy cùng dữ liệu. Gia đình có thể dùng chung một email/mật khẩu.
+
 ## Sao lưu
 
-Dữ liệu nằm trong bộ nhớ trình duyệt của máy. Xoá dữ liệu duyệt web hoặc gỡ ứng dụng là mất. Mỗi tháng nên vào **Cài đặt** → **Xuất file sao lưu** và cất file đó vào Drive hoặc Zalo của mình. Đổi máy thì dùng **Nhập từ file** để khôi phục.
+Dữ liệu nằm trong máy (offline) và trên cloud (khi đã đăng nhập). Vẫn nên xuất file sao lưu định kỳ.
 
 ## Chạy trên máy tính
 

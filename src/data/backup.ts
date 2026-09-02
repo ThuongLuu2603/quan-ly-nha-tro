@@ -1,4 +1,6 @@
 import type { Invoice, Reading, Room, Settings, Tenancy, Tenant } from '../domain/types'
+import { clearRemoteData, pushAllLocal } from '../sync/engine'
+import { withApplyingRemote } from '../sync/guard'
 import { db } from './db'
 
 export interface BackupFile {
@@ -42,10 +44,34 @@ export function isBackupFile(value: unknown): value is BackupFile {
 }
 
 export async function importBackup(file: BackupFile): Promise<void> {
-  await db.transaction(
-    'rw',
-    [db.rooms, db.tenancies, db.tenants, db.readings, db.invoices, db.settings],
-    async () => {
+  await withApplyingRemote(async () => {
+    await db.transaction(
+      'rw',
+      [db.rooms, db.tenancies, db.tenants, db.readings, db.invoices, db.settings],
+      async () => {
+        await Promise.all([
+          db.rooms.clear(),
+          db.tenancies.clear(),
+          db.tenants.clear(),
+          db.readings.clear(),
+          db.invoices.clear(),
+        ])
+        await db.rooms.bulkPut(file.rooms)
+        await db.tenancies.bulkPut(file.tenancies)
+        await db.tenants.bulkPut(file.tenants)
+        await db.readings.bulkPut(file.readings)
+        await db.invoices.bulkPut(file.invoices)
+        if (file.settings) await db.settings.put({ ...file.settings, id: 'app' })
+      },
+    )
+    await db.syncOutbox.clear()
+  })
+  await pushAllLocal()
+}
+
+export async function wipeAll(): Promise<void> {
+  await withApplyingRemote(async () => {
+    await db.transaction('rw', db.rooms, db.tenancies, db.tenants, db.readings, db.invoices, async () => {
       await Promise.all([
         db.rooms.clear(),
         db.tenancies.clear(),
@@ -53,24 +79,12 @@ export async function importBackup(file: BackupFile): Promise<void> {
         db.readings.clear(),
         db.invoices.clear(),
       ])
-      await db.rooms.bulkPut(file.rooms)
-      await db.tenancies.bulkPut(file.tenancies)
-      await db.tenants.bulkPut(file.tenants)
-      await db.readings.bulkPut(file.readings)
-      await db.invoices.bulkPut(file.invoices)
-      if (file.settings) await db.settings.put({ ...file.settings, id: 'app' })
-    },
-  )
-}
-
-export async function wipeAll(): Promise<void> {
-  await db.transaction('rw', db.rooms, db.tenancies, db.tenants, db.readings, db.invoices, async () => {
-    await Promise.all([
-      db.rooms.clear(),
-      db.tenancies.clear(),
-      db.tenants.clear(),
-      db.readings.clear(),
-      db.invoices.clear(),
-    ])
+    })
+    await db.syncOutbox.clear()
   })
+  try {
+    await clearRemoteData()
+  } catch {
+    // offline van xoa local duoc
+  }
 }

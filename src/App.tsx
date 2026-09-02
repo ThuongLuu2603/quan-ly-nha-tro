@@ -1,4 +1,7 @@
 import { NavLink, Route, Routes } from 'react-router-dom'
+import { AuthProvider } from './sync/AuthProvider'
+import { AuthGate } from './features/auth/AuthGate'
+import { SyncBar } from './sync/SyncBar'
 import { HomePage } from './features/home/HomePage'
 import { MeterPage } from './features/meter/MeterPage'
 import { IssuePage } from './features/invoices/IssuePage'
@@ -21,8 +24,11 @@ const NAV = [
 
 export default function App() {
   return (
-    <div className="app">
-      <Routes>
+    <AuthProvider>
+      <AuthGate>
+        <div className="app">
+          <SyncBar />
+          <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/chi-so" element={<MeterPage />} />
         <Route path="/phat-phieu" element={<IssuePage />} />
@@ -50,6 +56,8 @@ export default function App() {
           </NavLink>
         ))}
       </nav>
-    </div>
+        </div>
+      </AuthGate>
+    </AuthProvider>
   )
 }

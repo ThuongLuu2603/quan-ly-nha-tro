@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { formatMoney, parseMoneyInput } from '../domain/money'
 
 export function Card({
@@ -267,15 +267,41 @@ export function Banner({ tone, children }: { tone: 'warn' | 'danger' | 'info'; c
   return <div className={`banner ${tone}`}>{children}</div>
 }
 
+export interface ToastAction {
+  label: string
+  run: () => void | Promise<void>
+}
+
 export function useToast() {
-  const [message, setMessage] = useState<string | null>(null)
+  const [state, setState] = useState<{ message: string; action?: ToastAction } | null>(null)
 
   useEffect(() => {
-    if (!message) return
-    const timer = setTimeout(() => setMessage(null), 2600)
+    if (!state) return
+    // Co nut bam thi de lau hon cho kip doc va bam.
+    const timer = setTimeout(() => setState(null), state.action ? 5200 : 2600)
     return () => clearTimeout(timer)
-  }, [message])
+  }, [state])
 
-  const node = message ? <div className="toast">{message}</div> : null
-  return { toast: setMessage, toastNode: node }
+  const toast = useCallback((message: string, action?: ToastAction) => {
+    setState({ message, action })
+  }, [])
+
+  const node = state ? (
+    <div className="toast">
+      <span>{state.message}</span>
+      {state.action && (
+        <button
+          className="toast-action"
+          onClick={() => {
+            void state.action?.run()
+            setState(null)
+          }}
+        >
+          {state.action.label}
+        </button>
+      )}
+    </div>
+  ) : null
+
+  return { toast, toastNode: node }
 }

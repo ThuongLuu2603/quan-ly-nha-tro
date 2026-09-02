@@ -6,6 +6,7 @@ import { useDataset } from '../../data/store'
 import { today } from '../../domain/dates'
 import { downloadBlob } from '../../receipt/share'
 import { buildVietQRPayload } from '../../receipt/vietqr'
+import { useAuth } from '../../sync/AuthProvider'
 import {
   Banner,
   Card,
@@ -20,6 +21,7 @@ import { Page } from '../../ui/Page'
 export function SettingsPage() {
   const data = useDataset()
   const { toast, toastNode } = useToast()
+  const { configured, user, signOut, syncNow } = useAuth()
   const fileRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
 
@@ -55,6 +57,23 @@ export function SettingsPage() {
 
   return (
     <Page title="Cài đặt">
+      {configured && user && (
+        <Card title="Tài khoản đồng bộ">
+          <div className="stack tight">
+            <div className="small muted">Đang đăng nhập: {user.email}</div>
+            <div className="small muted">
+              Cùng một tài khoản trên mọi điện thoại sẽ thấy cùng dữ liệu khi có mạng.
+            </div>
+            <button className="btn block" onClick={() => void syncNow().then(() => toast('Đã đồng bộ'))}>
+              Đồng bộ ngay
+            </button>
+            <button className="btn ghost block" onClick={() => void signOut()}>
+              Đăng xuất
+            </button>
+          </div>
+        </Card>
+      )}
+
       <Card title="Thông tin nhà trọ">
         <div className="stack">
           <Field label="Tên hiển thị trên phiếu">
@@ -158,8 +177,8 @@ export function SettingsPage() {
       <Card title="Sao lưu dữ liệu">
         <div className="stack tight">
           <div className="small muted">
-            Dữ liệu chỉ nằm trong máy này. Mất máy hoặc xoá dữ liệu trình duyệt là mất hết, nên sao lưu
-            sau mỗi lần chốt sổ tháng.
+            Dữ liệu nằm trong máy và (khi đã đăng nhập) trên cloud. Vẫn nên xuất file sao lưu
+            định kỳ phòng khi xoá app hoặc mất máy.
             {s.lastBackupAt && (
               <> Lần sao lưu gần nhất {new Date(s.lastBackupAt).toLocaleDateString('vi-VN')}.</>
             )}

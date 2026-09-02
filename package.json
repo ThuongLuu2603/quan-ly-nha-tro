@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.113.0",
     "dexie": "^4.0.11",
     "dexie-react-hooks": "^4.4.0",
     "qrcode": "^1.5.4",

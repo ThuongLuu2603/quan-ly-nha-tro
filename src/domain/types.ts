@@ -132,6 +132,9 @@ export interface Settings {
   defaultWaterPrice: number
   invoiceFooter: string
   lastBackupAt?: ISODate
+  /** Neu co thi app tu dong bo voi Supabase khi co mang. */
+  supabaseUrl?: string
+  supabaseAnonKey?: string
 }
 
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid'

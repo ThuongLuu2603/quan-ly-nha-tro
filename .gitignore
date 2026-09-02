@@ -1,7 +1,11 @@
 node_modules
 dist
-*.tsbuildinfo
+_mockup
 dev-dist
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
 *.local
 .DS_Store
 .vscode/*
