@@ -39,7 +39,8 @@ Tiền phòng chạy theo mốc ngày của từng phòng, tròn một tháng t�
 3. Vào **Authentication → Providers**: bật **Email** và **Google**.
 4. Vào **Authentication → URL Configuration**, thêm **Redirect URL**:
    - `http://localhost:5173/` (dev)
-   - `https://thuongluu2603.github.io/quan-ly-nha-tro/` (bản public)
+   - `https://qlnt.marchluu.io.vn/` (bản chính)
+   - `https://thuongluu2603.github.io/quan-ly-nha-tro/` (GitHub Pages dự phòng)
 5. Vào **Project Settings → API**, copy **Project URL** và **anon public key**.
 6. Tạo file `.env.local` trong thư mục project (xem `.env.example`).
 7. Deploy GitHub Pages: vào repo **Settings → Secrets → Actions**, thêm:
