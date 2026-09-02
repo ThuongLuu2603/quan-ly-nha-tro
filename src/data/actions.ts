@@ -238,6 +238,7 @@ export interface AdjustTenancyInput {
   tenancy: Tenancy
   rent: number
   deposit: number
+  cycleDay: number
   /** Mac dinh true khi coc tang — tao phieu thu coc bo sung. */
   issueDepositInvoice?: boolean
   note?: string
@@ -258,6 +259,7 @@ export async function adjustTenancy(input: AdjustTenancyInput): Promise<ID | nul
       ...tenancy,
       rent: Math.round(rent),
       deposit: Math.round(deposit),
+      cycleDay: input.cycleDay,
       note: note?.trim() || tenancy.note,
     })
 
