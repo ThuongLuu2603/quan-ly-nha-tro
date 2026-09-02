@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { saveSettings } from '../../data/actions'
 import { VN_BANKS } from '../../data/banks'
 import { exportBackup, importBackup, isBackupFile, wipeAll } from '../../data/backup'
@@ -245,6 +246,18 @@ export function SettingsPage() {
         </Field>
         <div className="hint" style={{ marginTop: 8 }}>
           Đổi ở đây không ảnh hưởng phòng đã tạo, mỗi phòng vẫn giữ giá riêng.
+        </div>
+      </Card>
+
+      <Card title="In phiếu trên giấy A4">
+        <div className="stack tight">
+          <div className="small muted">
+            Xếp <strong>4 phiếu khổ A6</strong> trên một tờ A4 (2×2) để in hàng loạt bằng máy in văn phòng.
+            Thứ tự chọn = thứ tự trên giấy.
+          </div>
+          <Link className="btn primary block" to="/in-phieu">
+            Chọn phiếu để in A4
+          </Link>
         </div>
       </Card>
 

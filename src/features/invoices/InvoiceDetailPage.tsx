@@ -3,19 +3,16 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { deleteInvoice, markInvoiceSent, removePayment } from '../../data/actions'
 import {
   invoiceStatusLabel,
-  invoicesOfTenancy,
   invoiceAbsorbedBy,
   primaryTenant,
-  tenantsOf,
 } from '../../data/selectors'
 import { useDataset } from '../../data/store'
 import { outstandingOf, paidAmount, statusOf, wasCarriedForward } from '../../domain/billing'
 import * as dt from '../../domain/dates'
 import { formatMoney } from '../../domain/money'
 import type { Invoice } from '../../domain/types'
-import { renderReceipt } from '../../receipt/renderReceipt'
+import { buildReceiptBlob } from '../../receipt/buildReceiptBlob'
 import { copyImageToClipboard, downloadBlob, openZaloChat, shareImage } from '../../receipt/share'
-import { vietQRDataUrl } from '../../receipt/vietqr'
 import { Banner, Card, EmptyState, Pill, useToast } from '../../ui/components'
 import { Page } from '../../ui/Page'
 import { PaymentSheet } from './PaymentSheet'
@@ -46,25 +43,7 @@ export function InvoiceDetailPage() {
       if (!room) return
       setRendering(true)
       try {
-        const remaining = outstandingOf(current)
-        const qrAmount = remaining > 0 ? remaining : current.total
-        const note = transferNoteFor(room.name, current.issueDate)
-        const qrDataUrl = await vietQRDataUrl({
-          bankBin: data.settings.bankBin,
-          accountNo: data.settings.bankAccountNo,
-          amount: qrAmount,
-          message: note,
-        })
-
-        const blob = await renderReceipt({
-          settings: data.settings,
-          room,
-          invoice: current,
-          occupants: tenantsOf(data, current.tenancyId).map((t) => t.fullName),
-          qrDataUrl,
-          transferNote: note,
-          rentPaidThroughNote: rentNoteFor(current),
-        })
+        const blob = await buildReceiptBlob(data, current)
 
         if (cancelled) return
         blobRef.current = blob
@@ -76,16 +55,6 @@ export function InvoiceDetailPage() {
       } finally {
         if (!cancelled) setRendering(false)
       }
-    }
-
-    function rentNoteFor(current: Invoice): string | undefined {
-      if (current.kind !== 'monthly' || current.rentFrom) return undefined
-      const covered = invoicesOfTenancy(data, current.tenancyId)
-        .filter((i) => i.rentTo && i.issueDate <= current.issueDate)
-        .map((i) => i.rentTo!)
-        .sort()
-        .pop()
-      return covered ? `Tiền phòng đã đóng tới ngày ${dt.formatDate(covered)}` : undefined
     }
 
     if (invoice && room) void build(invoice)

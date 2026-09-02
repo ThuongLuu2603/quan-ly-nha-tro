@@ -13,6 +13,7 @@ import { MoveInPage } from './features/tenancy/MoveInPage'
 import { CheckoutPage } from './features/tenancy/CheckoutPage'
 import { ReportsPage } from './features/reports/ReportsPage'
 import { SettingsPage } from './features/settings/SettingsPage'
+import { PrintBatchPage } from './features/print/PrintBatchPage'
 
 const NAV = [
   { to: '/', label: 'Trang chủ', icon: '⌂' },
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/phong/:roomId/tra-phong" element={<CheckoutPage />} />
         <Route path="/bao-cao" element={<ReportsPage />} />
         <Route path="/cai-dat" element={<SettingsPage />} />
+        <Route path="/in-phieu" element={<PrintBatchPage />} />
         <Route path="*" element={<HomePage />} />
       </Routes>
 

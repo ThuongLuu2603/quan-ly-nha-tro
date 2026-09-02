@@ -672,6 +672,20 @@ textarea.input {
   display: block;
 }
 
+.print-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.print-preview-page img {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: block;
+  background: #fff;
+}
+
 .chip-row {
   display: flex;
   gap: 8px;
