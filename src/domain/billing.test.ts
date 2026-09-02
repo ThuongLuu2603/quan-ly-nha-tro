@@ -9,6 +9,8 @@ import {
   outstandingOf,
   ownTotal,
   paidAmount,
+  revenueBreakdownFromInvoices,
+  revenueBreakdownTotal,
   readingsToMap,
   statusOf,
   wasCarriedForward,
@@ -309,5 +311,36 @@ describe('coc bo sung', () => {
     })
     expect(result.total).toBe(2_000_000)
     expect(result.lines[0]?.type).toBe('deposit')
+  })
+})
+
+describe('tong hop doanh thu theo loai', () => {
+  it('gom tien tro, dien, nuoc, rac va bo qua no mang ky truoc', () => {
+    const breakdown = revenueBreakdownFromInvoices([
+      {
+        id: 'i1',
+        code: 'P1',
+        roomId: 'r1',
+        tenancyId: 't1',
+        kind: 'monthly',
+        issueDate: '2026-09-01',
+        lines: [
+          { id: 'a', type: 'rent', label: 'Tiền phòng', qty: 1, unitPrice: 3_000_000, amount: 3_000_000 },
+          { id: 'b', type: 'electric', label: 'Tiền điện', qty: 60, unitPrice: 4000, amount: 240_000 },
+          { id: 'c', type: 'water', label: 'Tiền nước', qty: 4, unitPrice: 20_000, amount: 80_000 },
+          { id: 'd', type: 'garbage', label: 'Tiền rác', qty: 1, unitPrice: 50_000, amount: 50_000 },
+          { id: 'e', type: 'carryOver', label: 'Còn nợ', qty: 1, unitPrice: 100_000, amount: 100_000 },
+        ],
+        total: 3_470_000,
+        payments: [],
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
+    ])
+
+    expect(breakdown.rent).toBe(3_000_000)
+    expect(breakdown.electric).toBe(240_000)
+    expect(breakdown.water).toBe(80_000)
+    expect(breakdown.garbage).toBe(50_000)
+    expect(revenueBreakdownTotal(breakdown)).toBe(3_370_000)
   })
 })

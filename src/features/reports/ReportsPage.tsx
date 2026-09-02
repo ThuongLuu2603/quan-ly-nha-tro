@@ -1,12 +1,64 @@
 import { useMemo, useState } from 'react'
 import { totalDepositHeld } from '../../data/selectors'
 import { useDataset } from '../../data/store'
-import { cashPaidAmount, outstandingOf, ownTotal, paidAmount } from '../../domain/billing'
+import {
+  cashPaidAmount,
+  outstandingOf,
+  ownTotal,
+  paidAmount,
+  revenueBreakdownFromInvoices,
+  revenueBreakdownTotal,
+  type RevenueBreakdown,
+} from '../../domain/billing'
 import * as dt from '../../domain/dates'
 import { formatMoney } from '../../domain/money'
 import { downloadBlob } from '../../receipt/share'
 import { Card, EmptyState } from '../../ui/components'
 import { Page } from '../../ui/Page'
+
+function BreakdownRows({ breakdown, compact }: { breakdown: RevenueBreakdown; compact?: boolean }) {
+  const rows = [
+    { label: 'Tiền trọ', amount: breakdown.rent },
+    { label: 'Tiền điện', amount: breakdown.electric },
+    { label: 'Tiền nước', amount: breakdown.water },
+    { label: 'Tiền rác', amount: breakdown.garbage },
+  ].filter((row) => row.amount !== 0)
+
+  const extras = [
+    breakdown.deposit !== 0 ? { label: 'Tiền cọc', amount: breakdown.deposit } : null,
+    breakdown.other !== 0 ? { label: 'Khác', amount: breakdown.other } : null,
+  ].filter((row): row is { label: string; amount: number } => row !== null)
+
+  if (rows.length === 0 && extras.length === 0) {
+    return <div className="muted small">Chưa có khoản nào trong kỳ này.</div>
+  }
+
+  if (compact) {
+    const parts = [...rows, ...extras].map((row) => `${row.label} ${formatMoney(row.amount)}`)
+    return <div className="tiny muted">{parts.join(' · ')}</div>
+  }
+
+  return (
+    <div className="stack tight">
+      {rows.map((row) => (
+        <div className="row between" key={row.label}>
+          <span className="muted small">{row.label}</span>
+          <span className="num small">{formatMoney(row.amount)} đ</span>
+        </div>
+      ))}
+      {extras.map((row) => (
+        <div className="row between" key={row.label}>
+          <span className="muted small">{row.label}</span>
+          <span className="num small">{formatMoney(row.amount)} đ</span>
+        </div>
+      ))}
+      <div className="row between" style={{ marginTop: 4, paddingTop: 8, borderTop: '1px solid var(--line)' }}>
+        <span className="small strong">Tổng</span>
+        <span className="num strong">{formatMoney(revenueBreakdownTotal(breakdown))} đ</span>
+      </div>
+    </div>
+  )
+}
 
 export function ReportsPage() {
   const data = useDataset()
@@ -14,14 +66,22 @@ export function ReportsPage() {
 
   const roomName = useMemo(() => new Map(data.rooms.map((r) => [r.id, r.name])), [data.rooms])
 
+  const yearInvoices = useMemo(
+    () => data.invoices.filter((i) => i.issueDate.startsWith(String(year))),
+    [data.invoices, year],
+  )
+
   const months = useMemo(() => {
     return dt.periodRange(`${year}-01`, `${year}-12`).map((period) => {
       const invoices = data.invoices.filter((i) => dt.periodOf(i.issueDate) === period)
       const billed = invoices.reduce((acc, i) => acc + Math.max(0, ownTotal(i)), 0)
       const collected = invoices.reduce((acc, i) => acc + Math.max(0, cashPaidAmount(i)), 0)
-      return { period, billed, collected, count: invoices.length }
+      const breakdown = revenueBreakdownFromInvoices(invoices)
+      return { period, billed, collected, count: invoices.length, breakdown }
     })
   }, [data.invoices, year])
+
+  const yearBreakdown = useMemo(() => revenueBreakdownFromInvoices(yearInvoices), [yearInvoices])
 
   const yearTotal = months.reduce(
     (acc, m) => ({ billed: acc.billed + m.billed, collected: acc.collected + m.collected }),
@@ -72,6 +132,10 @@ export function ReportsPage() {
         ))}
       </div>
 
+      <Card title={`Tổng kết năm ${year}`}>
+        <BreakdownRows breakdown={yearBreakdown} />
+      </Card>
+
       <Card title={`Doanh thu năm ${year}`}>
         <div className="stack tight">
           <div className="row between">
@@ -92,16 +156,19 @@ export function ReportsPage() {
       </Card>
 
       <Card title="Theo tháng">
-        <div className="stack tight">
+        <div className="stack">
           {months
             .filter((m) => m.count > 0)
             .map((month) => (
-              <div className="row between" key={month.period}>
-                <span className="small">{dt.formatPeriod(month.period)}</span>
-                <span className="num small">
-                  {formatMoney(month.billed)} đ
-                  <span className="muted"> · thu {formatMoney(month.collected)} đ</span>
-                </span>
+              <div className="stack tight" key={month.period} style={{ paddingBottom: 12, borderBottom: '1px solid var(--line)' }}>
+                <div className="row between">
+                  <span className="small strong">{dt.formatPeriod(month.period)}</span>
+                  <span className="num small">
+                    {formatMoney(month.billed)} đ
+                    <span className="muted"> · thu {formatMoney(month.collected)} đ</span>
+                  </span>
+                </div>
+                <BreakdownRows breakdown={month.breakdown} compact />
               </div>
             ))}
         </div>

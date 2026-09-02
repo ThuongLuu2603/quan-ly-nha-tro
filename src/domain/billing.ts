@@ -52,6 +52,69 @@ export function ownTotal(invoice: Invoice): number {
   return invoice.lines.reduce((acc, l) => (l.type === 'carryOver' ? acc : acc + l.amount), 0)
 }
 
+export interface RevenueBreakdown {
+  rent: number
+  electric: number
+  water: number
+  garbage: number
+  deposit: number
+  other: number
+}
+
+/** Tong hop tien theo loai dong phiếu, bo qua no mang tu ky truoc. */
+export function revenueBreakdownFromInvoices(invoices: Invoice[]): RevenueBreakdown {
+  const breakdown: RevenueBreakdown = {
+    rent: 0,
+    electric: 0,
+    water: 0,
+    garbage: 0,
+    deposit: 0,
+    other: 0,
+  }
+
+  for (const invoice of invoices) {
+    for (const line of invoice.lines) {
+      if (line.type === 'carryOver') continue
+      switch (line.type) {
+        case 'rent':
+        case 'rentProrated':
+        case 'rentRefund':
+          breakdown.rent += line.amount
+          break
+        case 'electric':
+          breakdown.electric += line.amount
+          break
+        case 'water':
+          breakdown.water += line.amount
+          break
+        case 'garbage':
+          breakdown.garbage += line.amount
+          break
+        case 'deposit':
+        case 'depositRefund':
+          breakdown.deposit += line.amount
+          break
+        default:
+          breakdown.other += line.amount
+          break
+      }
+    }
+  }
+
+  return breakdown
+}
+
+export function revenueBreakdownTotal(breakdown: RevenueBreakdown): number {
+  return (
+    breakdown.rent +
+    breakdown.electric +
+    breakdown.water +
+    breakdown.garbage +
+    breakdown.deposit +
+    breakdown.other
+  )
+}
+
 export function wasCarriedForward(invoice: Invoice): boolean {
   return invoice.payments.some((p) => p.method === 'carried')
 }
