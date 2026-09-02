@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { saveSettings } from '../../data/actions'
 import { VN_BANKS } from '../../data/banks'
 import { exportBackup, importBackup, isBackupFile, wipeAll } from '../../data/backup'
+import { db } from '../../data/db'
 import { useDataset } from '../../data/store'
 import { today } from '../../domain/dates'
 import { downloadBlob } from '../../receipt/share'
@@ -24,9 +25,18 @@ export function SettingsPage() {
   const { configured, user, signOut, syncNow } = useAuth()
   const fileRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
+  const [pendingSync, setPendingSync] = useState(0)
+
+  const refreshPendingSync = () => {
+    void db.syncOutbox.count().then(setPendingSync)
+  }
 
   const s = data.settings
   const qrReady = Boolean(s.bankBin && s.bankAccountNo)
+
+  useEffect(() => {
+    refreshPendingSync()
+  }, [data.rooms.length, data.invoices.length])
 
   const doExport = async () => {
     const backup = await exportBackup()
@@ -62,9 +72,22 @@ export function SettingsPage() {
           <div className="stack tight">
             <div className="small muted">Đang đăng nhập: {user.email}</div>
             <div className="small muted">
-              Cùng một tài khoản trên mọi điện thoại sẽ thấy cùng dữ liệu khi có mạng.
+              Máy này: {data.rooms.length} phòng · {data.invoices.length} phiếu
+              {pendingSync > 0 ? ` · ${pendingSync} thay đổi chờ đẩy lên` : ''}
             </div>
-            <button className="btn block" onClick={() => void syncNow().then(() => toast('Đã đồng bộ'))}>
+            <div className="small muted">
+              Cùng tài khoản + cùng địa chỉ <strong>qlnt.marchluu.io.vn</strong> mới thấy giống nhau.
+              Mỗi máy lưu tạm trên máy, cần mạng để đồng bộ.
+            </div>
+            <button
+              className="btn block"
+              onClick={() =>
+                void syncNow().then(() => {
+                  refreshPendingSync()
+                  toast('Đã đồng bộ hai chiều')
+                })
+              }
+            >
               Đồng bộ ngay
             </button>
             <button className="btn ghost block" onClick={() => void signOut()}>

@@ -79,11 +79,18 @@ function bindAuthListeners(
   })
 
   const onOnline = () => scheduleSync(300)
+  const onVisible = () => {
+    if (document.visibilityState === 'visible') scheduleSync(300)
+  }
   window.addEventListener('online', onOnline)
+  document.addEventListener('visibilitychange', onVisible)
+  window.addEventListener('pageshow', onOnline)
 
   return () => {
     sub.subscription.unsubscribe()
     window.removeEventListener('online', onOnline)
+    document.removeEventListener('visibilitychange', onVisible)
+    window.removeEventListener('pageshow', onOnline)
     unsubscribeRealtime()
   }
 }
@@ -162,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const syncNow = useCallback(async () => {
-    await runSync()
+    await runSync({ fullPull: true })
   }, [])
 
   const value = useMemo<AuthContextValue>(

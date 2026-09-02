@@ -1,7 +1,7 @@
 import { db } from '../data/db'
 import { isApplyingRemote } from './guard'
 import { applyRemoteRecord } from './apply'
-import { getLastPullAt, queueSync, setLastPullAt } from './outbox'
+import { entityKey, getLastPullAt, queueSync, setLastPullAt } from './outbox'
 import { getSupabase } from './supabase'
 import type { RemoteSyncRecord, SyncEntityType, SyncStatus } from './types'
 
@@ -46,10 +46,18 @@ export async function maybeSeedCloud(): Promise<void> {
   const localRooms = await db.rooms.count()
   if ((count ?? 0) === 0 && localRooms > 0) {
     await pushAllLocal()
+    return
   }
+
+  await pushMissingLocal(auth.session.user.id)
 }
 
-export async function runSync(): Promise<void> {
+interface RunSyncOptions {
+  /** Keo lai toan bo ban ghi tu cloud — dung khi bam "Dong bo ngay". */
+  fullPull?: boolean
+}
+
+export async function runSync(options: RunSyncOptions = {}): Promise<void> {
   const supabase = getSupabase()
   if (!supabase || syncing) return
 
@@ -65,7 +73,11 @@ export async function runSync(): Promise<void> {
   notify('syncing')
 
   try {
+    await pushMissingLocal(auth.session.user.id)
     await pushOutbox(auth.session.user.id)
+    if (options.fullPull) {
+      await setLastPullAt('1970-01-01T00:00:00.000Z')
+    }
     await pullRemote(auth.session.user.id)
     notify('ok')
   } catch (error) {
@@ -74,6 +86,48 @@ export async function runSync(): Promise<void> {
   } finally {
     syncing = false
   }
+}
+
+/** Day nhung ban ghi chi co tren may nay len cloud, khong ghi de du lieu da co. */
+async function pushMissingLocal(userId: string): Promise<void> {
+  const supabase = getSupabase()
+  if (!supabase) return
+
+  const { data: remote, error } = await supabase
+    .from('sync_records')
+    .select('entity_type, entity_id')
+    .eq('user_id', userId)
+    .eq('deleted', false)
+
+  if (error) throw error
+
+  const remoteKeys = new Set((remote ?? []).map((row) => `${row.entity_type}:${row.entity_id}`))
+
+  const [rooms, tenancies, tenants, readings, invoices, settings] = await Promise.all([
+    db.rooms.toArray(),
+    db.tenancies.toArray(),
+    db.tenants.toArray(),
+    db.readings.toArray(),
+    db.invoices.toArray(),
+    db.settings.get('app'),
+  ])
+
+  const queueIfMissing = async (
+    entityType: SyncEntityType,
+    entityId: string,
+    payload: unknown,
+  ): Promise<void> => {
+    const key = entityKey(entityType, entityId)
+    if (remoteKeys.has(key) || (await db.syncOutbox.get(key))) return
+    await queueSync(entityType, entityId, payload, false)
+  }
+
+  for (const room of rooms) await queueIfMissing('room', room.id, room)
+  for (const tenancy of tenancies) await queueIfMissing('tenancy', tenancy.id, tenancy)
+  for (const tenant of tenants) await queueIfMissing('tenant', tenant.id, tenant)
+  for (const reading of readings) await queueIfMissing('reading', reading.id, reading)
+  for (const invoice of invoices) await queueIfMissing('invoice', invoice.id, invoice)
+  if (settings) await queueIfMissing('settings', 'app', settings)
 }
 
 async function pushOutbox(userId: string): Promise<void> {
