@@ -91,36 +91,75 @@ export function openPrintDialog(pageBlobs: Blob[]): void {
   <style>
     @page { size: A4 portrait; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #fff; }
+    html, body { background: #fff; }
     .page {
       width: 210mm;
       height: 297mm;
       page-break-after: always;
+      break-after: page;
       overflow: hidden;
     }
-    .page:last-child { page-break-after: auto; }
+    .page:last-child { page-break-after: auto; break-after: auto; }
     img { width: 100%; height: 100%; object-fit: contain; display: block; }
   </style>
 </head>
-<body>${pages}
-<script>
-  window.addEventListener('load', function () {
-    window.focus();
-    window.print();
-  });
-</script>
-</body>
+<body>${pages}</body>
 </html>`
 
-  const win = window.open('', '_blank', 'noopener,noreferrer')
-  if (!win) {
+  document.getElementById('qlnt-print-frame')?.remove()
+
+  const iframe = document.createElement('iframe')
+  iframe.id = 'qlnt-print-frame'
+  iframe.setAttribute('aria-hidden', 'true')
+  iframe.title = 'In phiếu A4'
+  iframe.style.cssText =
+    'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none'
+
+  const cleanup = () => {
     urls.forEach(URL.revokeObjectURL)
-    throw new Error('Trình duyệt chặn cửa sổ in — hãy cho phép popup')
+    iframe.remove()
   }
 
-  win.document.open()
-  win.document.write(html)
-  win.document.close()
+  iframe.addEventListener('load', () => {
+    const win = iframe.contentWindow
+    const doc = iframe.contentDocument
+    if (!win || !doc) return
 
-  window.setTimeout(() => urls.forEach(URL.revokeObjectURL), 120_000)
+    const waitImages = Promise.all(
+      Array.from(doc.images).map(
+        (img) =>
+          new Promise<void>((resolve) => {
+            if (img.complete) {
+              resolve()
+              return
+            }
+            img.onload = () => resolve()
+            img.onerror = () => resolve()
+          }),
+      ),
+    )
+
+    void waitImages.then(() => {
+      window.setTimeout(() => {
+        win.focus()
+        win.print()
+      }, 80)
+    })
+  })
+
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentDocument
+  if (!doc) {
+    cleanup()
+    throw new Error('Trình duyệt không hỗ trợ in nội bộ')
+  }
+
+  doc.open()
+  doc.write(html)
+  doc.close()
+
+  // Giữ blob đủ lâu để hộp thoại in tải ảnh; dọn sau.
+  window.setTimeout(cleanup, 180_000)
 }
+
