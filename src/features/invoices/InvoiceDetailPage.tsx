@@ -85,10 +85,12 @@ export function InvoiceDetailPage() {
 
   const share = async () => {
     if (!blobRef.current) return
+    // Tin nhan di kem anh phieu — khong ghi "tien phong" de khach dung lam noi
+    // dung chuyen khoan, tranh vet thu nhập trên sao kê ngân hàng.
     const outcome = await shareImage(
       blobRef.current,
       `phieu-${invoice.code}.png`,
-      `Phiếu tiền phòng ${room.name} · ${note}`,
+      `Phiếu ${note}`,
     )
     if (outcome === 'cancelled') return
     await markInvoiceSent(invoice.id)
