@@ -1,4 +1,4 @@
-import { paidAmount, displayInvoiceLineLabel } from '../domain/billing'
+import { paidAmount } from '../domain/billing'
 import * as dt from '../domain/dates'
 import { formatMoney, moneyToWords } from '../domain/money'
 import type { Invoice, Room, Settings } from '../domain/types'
@@ -145,7 +145,7 @@ export async function renderReceipt(data: ReceiptData): Promise<Blob> {
   divider()
 
   for (const l of invoice.lines) {
-    row(displayInvoiceLineLabel(invoice, l), `${formatMoney(l.amount)} đ`)
+    row(l.label, `${formatMoney(l.amount)} đ`)
     if (l.detail) {
       y -= 4
       text(l.detail, { size: 15, color: MUTED })
