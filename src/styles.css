@@ -916,6 +916,57 @@ textarea.input {
   gap: 10px;
 }
 
+.revenue-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 4px;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 2px;
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-legend .dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+
+.chart-legend .dot.billed {
+  background: var(--accent);
+  opacity: 0.35;
+}
+
+.chart-legend .dot.collected {
+  background: var(--accent);
+}
+
+.month-row {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.month-caret {
+  display: inline-block;
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 @media (max-width: 380px) {
   .stat-grid {
     grid-template-columns: 1fr;

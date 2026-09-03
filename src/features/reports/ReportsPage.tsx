@@ -12,10 +12,11 @@ import {
 } from '../../domain/billing'
 import * as dt from '../../domain/dates'
 import { buildRoomById, compareInvoicesByRoom } from '../../domain/roomOrder'
-import { formatMoney } from '../../domain/money'
+import { formatMoney, formatNumber } from '../../domain/money'
 import { downloadBlob } from '../../receipt/share'
 import { Card, EmptyState } from '../../ui/components'
 import { Page } from '../../ui/Page'
+import type { Invoice, Period } from '../../domain/types'
 
 function BreakdownRows({ breakdown, compact }: { breakdown: RevenueBreakdown; compact?: boolean }) {
   const rows = [
@@ -61,9 +62,105 @@ function BreakdownRows({ breakdown, compact }: { breakdown: RevenueBreakdown; co
   )
 }
 
+interface MonthStat {
+  period: Period
+  invoices: Invoice[]
+  count: number
+  billed: number
+  collected: number
+  breakdown: RevenueBreakdown
+  kwh: number
+  m3: number
+  debt: number
+}
+
+function usageKwhOf(invoices: Invoice[]): number {
+  let kwh = 0
+  for (const invoice of invoices) {
+    for (const lineItem of invoice.lines) {
+      if (lineItem.type !== 'electric') continue
+      const qty = lineItem.qty > 0 ? lineItem.qty : 0
+      kwh += qty
+    }
+  }
+  return Math.round(kwh)
+}
+
+function usageM3Of(invoices: Invoice[]): number {
+  let m3 = 0
+  for (const invoice of invoices) {
+    for (const lineItem of invoice.lines) {
+      if (lineItem.type !== 'water') continue
+      const qty = lineItem.qty > 0 ? lineItem.qty : 0
+      m3 += qty
+    }
+  }
+  return Math.round(m3)
+}
+
+/** Biểu đồ cột SVG doanh thu theo tháng — không cần thư viện ngoài. */
+function RevenueChart({ months, year }: { months: MonthStat[]; year: number }) {
+  const maxValue = Math.max(...months.map((m) => Math.max(m.billed, m.collected)), 1)
+  const current = dt.periodOf(dt.today())
+  const W = 720
+  const H = 190
+  const PAD_L = 4
+  const PAD_B = 26
+  const barArea = H - PAD_B
+  const slot = W / months.length
+  const barW = Math.min(18, slot * 0.52)
+  const gap = Math.min(6, slot * 0.14)
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="revenue-chart" role="img" aria-label={`Doanh thu năm ${year}`}>
+      {[0.25, 0.5, 0.75, 1].map((t) => (
+        <line
+          key={t}
+          x1={PAD_L}
+          x2={W - PAD_L}
+          y1={barArea * (1 - t) + 4}
+          y2={barArea * (1 - t) + 4}
+          stroke="var(--border)"
+          strokeDasharray="3 5"
+          strokeWidth="1"
+        />
+      ))}
+      {months.map((m, index) => {
+        const x = PAD_L + index * slot + (slot - barW * 2 - gap) / 2
+        const bh = (v: number) => Math.max(0, (v / maxValue) * (barArea - 8))
+        const billedH = bh(m.billed)
+        const collectedH = bh(m.collected)
+        const isActive = m.period === current
+        const hasData = m.count > 0
+        return (
+          <g key={m.period}>
+            {hasData && m.billed > 0 && (
+              <rect x={x} y={barArea - billedH + 4} width={barW} height={billedH} rx={3} fill="var(--accent)" opacity={0.35} />
+            )}
+            {hasData && m.collected > 0 && (
+              <rect x={x + barW + gap} y={barArea - collectedH + 4} width={barW} height={collectedH} rx={3} fill="var(--accent)" />
+            )}
+            <text
+              x={x + barW + gap / 2}
+              y={H - 8}
+              textAnchor="middle"
+              fontSize="10.5"
+              fontWeight={isActive ? 700 : 500}
+              fill={isActive ? 'var(--accent)' : 'var(--muted)'}
+            >
+              {Number(m.period.slice(5, 7))}
+            </text>
+          </g>
+        )
+      })}
+      </svg>
+  )
+}
+
 export function ReportsPage() {
   const data = useDataset()
   const [year, setYear] = useState(() => Number(dt.today().slice(0, 4)))
+  const [openMonth, setOpenMonth] = useState<Period | null>(null)
 
   const roomName = useMemo(() => new Map(data.rooms.map((r) => [r.id, r.name])), [data.rooms])
   const roomById = useMemo(() => buildRoomById(data.rooms), [data.rooms])
@@ -73,13 +170,26 @@ export function ReportsPage() {
     [data.invoices, year],
   )
 
-  const months = useMemo(() => {
+  const months = useMemo<MonthStat[]>(() => {
     return dt.periodRange(`${year}-01`, `${year}-12`).map((period) => {
       const invoices = data.invoices.filter((i) => dt.periodOf(i.issueDate) === period)
       const billed = invoices.reduce((acc, i) => acc + Math.max(0, ownTotal(i)), 0)
       const collected = invoices.reduce((acc, i) => acc + Math.max(0, cashPaidAmount(i)), 0)
-      const breakdown = revenueBreakdownFromInvoices(invoices)
-      return { period, billed, collected, count: invoices.length, breakdown }
+      const debt = invoices.reduce((acc, i) => {
+        const remaining = outstandingOf(i)
+        return remaining > 0 ? acc + remaining : acc
+      }, 0)
+      return {
+        period,
+        invoices,
+        count: invoices.length,
+        billed,
+        collected,
+        breakdown: revenueBreakdownFromInvoices(invoices),
+        kwh: usageKwhOf(invoices),
+        m3: usageM3Of(invoices),
+        debt,
+      }
     })
   }, [data.invoices, year])
 
@@ -89,6 +199,23 @@ export function ReportsPage() {
     (acc, m) => ({ billed: acc.billed + m.billed, collected: acc.collected + m.collected }),
     { billed: 0, collected: 0 },
   )
+
+  const collectionRate = yearTotal.billed > 0 ? Math.round((yearTotal.collected / yearTotal.billed) * 100) : 0
+
+  const kwhYear = months.reduce((acc, m) => acc + m.kwh, 0)
+  const m3Year = months.reduce((acc, m) => acc + m.m3, 0)
+
+  const best = useMemo(() => {
+    const withData = months.filter((m) => m.billed > 0)
+    if (withData.length === 0) return undefined
+    return withData.reduce((acc, m) => (m.billed > acc.billed ? m : acc))
+  }, [months])
+
+  const occupancy = useMemo(() => {
+    const occupied = data.rooms.filter((room) => data.tenancies.some((t) => t.roomId === room.id && t.status === 'active'))
+    const rate = data.rooms.length > 0 ? Math.round((occupied.length / data.rooms.length) * 100) : 0
+    return { occupied, rate }
+  }, [data.rooms, data.tenancies])
 
   const debts = data.invoices
     .map((invoice) => ({ invoice, remaining: outstandingOf(invoice) }))
@@ -134,46 +261,119 @@ export function ReportsPage() {
         ))}
       </div>
 
+      <div className="stat-grid" style={{ marginBottom: 14 }}>
+        <div className="stat">
+          <div className="label">Ra phiếu {year}</div>
+          <div className="value">{formatMoney(yearTotal.billed)}</div>
+        </div>
+        <div className="stat">
+          <div className="label">Đã thu</div>
+          <div className="value" style={{ color: 'var(--ok)' }}>
+            {formatMoney(yearTotal.collected)}
+          </div>
+        </div>
+        <div className="stat">
+          <div className="label">Tỷ lệ thu</div>
+          <div className="value" style={{ color: collectionRate >= 95 ? 'var(--ok)' : collectionRate >= 80 ? 'var(--warn)' : 'var(--danger)' }}>
+            {collectionRate}%
+          </div>
+        </div>
+      </div>
+
+      <Card title={`Biểu đồ doanh thu ${year}`}>
+        <div className="chart-legend tiny muted">
+          <span><i className="dot billed" /> Ra phiếu</span>
+          <span><i className="dot collected" /> Đã thu</span>
+        </div>
+        <RevenueChart months={months} year={year} />
+      </Card>
+
       <Card title={`Tổng kết năm ${year}`}>
         <BreakdownRows breakdown={yearBreakdown} />
       </Card>
 
-      <Card title={`Doanh thu năm ${year}`}>
-        <div className="stack tight">
-          <div className="row between">
-            <span className="muted small">Tổng ra phiếu</span>
-            <span className="num strong">{formatMoney(yearTotal.billed)} đ</span>
-          </div>
-          <div className="row between">
-            <span className="muted small">Đã thu</span>
-            <span className="num strong" style={{ color: 'var(--ok)' }}>
-              {formatMoney(yearTotal.collected)} đ
-            </span>
-          </div>
-          <div className="row between">
-            <span className="muted small">Tiền cọc đang giữ</span>
-            <span className="num">{formatMoney(totalDepositHeld(data))} đ</span>
-          </div>
+      <Card title={`Điện nước năm ${year}`}>
+        <div className="row between">
+          <span className="muted small">Điện tiêu thụ</span>
+          <span className="num strong">{formatNumber(kwhYear)} kWh</span>
+        </div>
+        <div className="row between" style={{ marginTop: 6 }}>
+          <span className="muted small">Nước tiêu thụ</span>
+          <span className="num strong">{formatNumber(m3Year)} m³</span>
         </div>
       </Card>
 
-      <Card title="Theo tháng">
+      <Card title={`Theo tháng · bấm để xem chi tiết`}>
         <div className="stack">
           {months
             .filter((m) => m.count > 0)
-            .map((month) => (
-              <div className="stack tight" key={month.period} style={{ paddingBottom: 12, borderBottom: '1px solid var(--line)' }}>
-                <div className="row between">
-                  <span className="small strong">{dt.formatPeriod(month.period)}</span>
-                  <span className="num small">
-                    {formatMoney(month.billed)} đ
-                    <span className="muted"> · thu {formatMoney(month.collected)} đ</span>
-                  </span>
+            .map((month) => {
+              const open = openMonth === month.period
+              const rate = month.billed > 0 ? Math.round((month.collected / month.billed) * 100) : 100
+              return (
+                <div key={month.period} style={{ paddingBottom: 12, borderBottom: '1px solid var(--line)' }}>
+                  <button
+                    type="button"
+                    className="row between month-row"
+                    onClick={() => setOpenMonth(open ? null : month.period)}
+                  >
+                    <span className="small strong">{dt.formatPeriod(month.period)}</span>
+                    <span className="num small">
+                      {formatMoney(month.billed)} đ
+                      <span className="muted"> · thu {rate}%</span>
+                      <span className="month-caret">{open ? '▾' : '▸'}</span>
+                    </span>
+                  </button>
+                  {open ? (
+                    <div className="stack tight" style={{ marginTop: 10 }}>
+                      <div className="row between small">
+                        <span className="muted">Đã thu</span>
+                        <span className="num" style={{ color: 'var(--ok)' }}>{formatMoney(month.collected)} đ</span>
+                      </div>
+                      {month.debt > 0 && (
+                        <div className="row between small">
+                          <span className="muted">Còn nợ từ phiếu tháng này</span>
+                          <span className="num" style={{ color: 'var(--danger)' }}>{formatMoney(month.debt)} đ</span>
+                        </div>
+                      )}
+                      {month.kwh > 0 && (
+                        <div className="row between small">
+                          <span className="muted">Điện</span>
+                          <span className="num">{formatNumber(month.kwh)} kWh</span>
+                        </div>
+                      )}
+                      {month.m3 > 0 && (
+                        <div className="row between small">
+                          <span className="muted">Nước</span>
+                          <span className="num">{formatNumber(month.m3)} m³</span>
+                        </div>
+                      )}
+                      <BreakdownRows breakdown={month.breakdown} />
+                    </div>
+                  ) : (
+                    <BreakdownRows breakdown={month.breakdown} compact />
+                  )}
                 </div>
-                <BreakdownRows breakdown={month.breakdown} compact />
-              </div>
-            ))}
+              )
+            })}
         </div>
+      </Card>
+
+      <Card title="Hiện trạng phòng">
+        <div className="row between small">
+          <span className="muted">Đang có khách</span>
+          <span className="num strong">{occupancy.occupied.length}/{data.rooms.length} · {occupancy.rate}%</span>
+        </div>
+        <div className="row between" style={{ marginTop: 6 }}>
+          <span className="muted small">Tiền cọc đang giữ</span>
+          <span className="num">{formatMoney(totalDepositHeld(data))} đ</span>
+        </div>
+        {best && (
+          <div className="row between" style={{ marginTop: 6 }}>
+            <span className="muted small">Tháng ra phiếu cao nhất</span>
+            <span className="num small">{dt.formatPeriod(best.period)} · {formatMoney(best.billed)} đ</span>
+          </div>
+        )}
       </Card>
 
       <Card title={`Phiếu còn nợ (${debts.length})`}>
