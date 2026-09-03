@@ -85,7 +85,7 @@ export function IssuePage() {
     const checked = selected.has(item.room.id)
     const early = options?.early ?? false
     const rentLine = item.preview.rentFrom
-      ? `Tiền phòng ${dt.formatDateShort(item.preview.rentFrom)} – ${dt.formatDateShort(item.preview.rentTo!)}`
+      ? dt.formatRentMonthLabel(item.preview.rentFrom)
       : `Tiền phòng đã đóng tới ${dt.formatDate(item.preview.rentPaidThrough!)}`
 
     return (

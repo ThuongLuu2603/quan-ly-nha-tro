@@ -7,7 +7,7 @@ import {
   primaryTenant,
 } from '../../data/selectors'
 import { useDataset } from '../../data/store'
-import { outstandingOf, paidAmount, statusOf, wasCarriedForward } from '../../domain/billing'
+import { outstandingOf, paidAmount, statusOf, wasCarriedForward, displayInvoiceLineLabel } from '../../domain/billing'
 import * as dt from '../../domain/dates'
 import { formatMoney } from '../../domain/money'
 import type { Invoice } from '../../domain/types'
@@ -137,7 +137,7 @@ export function InvoiceDetailPage() {
         {invoice.lines.map((line) => (
           <div className="line-row" key={line.id}>
             <div className="grow">
-              <div>{line.label}</div>
+              <div>{displayInvoiceLineLabel(invoice, line)}</div>
               {line.detail && <div className="tiny muted">{line.detail}</div>}
             </div>
             <div className="num">{formatMoney(line.amount)} đ</div>

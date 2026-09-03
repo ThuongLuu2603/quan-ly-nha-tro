@@ -38,6 +38,14 @@ export function sumLines(lines: InvoiceLine[]): number {
   return lines.reduce((acc, l) => acc + l.amount, 0)
 }
 
+/** Hiển thị dòng phiếu: tiền phòng đủ tháng chỉ ghi số tháng. */
+export function displayInvoiceLineLabel(invoice: Invoice, item: InvoiceLine): string {
+  if (item.type === 'rent' && invoice.rentFrom) {
+    return dt.formatRentMonthLabel(invoice.rentFrom)
+  }
+  return item.label
+}
+
 export function paidAmount(invoice: Invoice): number {
   return invoice.payments.reduce((acc, p) => acc + p.amount, 0)
 }
@@ -230,9 +238,7 @@ export function buildMonthlyInvoice(input: {
     rentFrom = tenancy.rentPaidThrough
     rentTo = dt.nextCycleStart(rentFrom, tenancy.cycleDay)
     nextRentPaidThrough = rentTo
-    lines.push(
-      line('rent', `Tiền phòng ${dt.formatDate(rentFrom)} – ${dt.formatDate(rentTo)}`, tenancy.rent),
-    )
+    lines.push(line('rent', dt.formatRentMonthLabel(rentFrom), tenancy.rent))
   }
 
   const utilityEnd = dt.periodBounds(utilityPeriod).end
@@ -347,7 +353,7 @@ export function buildMoveInInvoice(input: {
     rentFrom = firstCycleStart
     rentTo = dt.nextCycleStart(firstCycleStart, cycleDay)
     rentPaidThrough = rentTo
-    lines.push(line('rent', `Tiền phòng ${dt.formatDate(rentFrom)} – ${dt.formatDate(rentTo)}`, rent))
+    lines.push(line('rent', dt.formatRentMonthLabel(rentFrom), rent))
   }
 
   return {

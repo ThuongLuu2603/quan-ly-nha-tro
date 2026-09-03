@@ -156,6 +156,11 @@ export function formatInvoiceMonthShort(invoiceMonth: Period): string {
   return `T${pad(month)}/${year}`
 }
 
+/** Nhãn tiền phòng theo số tháng (không ghi khoảng ngày). */
+export function formatRentMonthLabel(rentFrom: ISODate): string {
+  return `Tiền phòng ${formatPeriod(periodOf(rentFrom))}`
+}
+
 export function formatPeriodRange(period: Period): string {
   const { start, end } = periodBounds(period)
   return `${formatDateShort(start)} – ${formatDateShort(end)}`

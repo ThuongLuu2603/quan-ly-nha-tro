@@ -81,6 +81,7 @@ describe('phieu thang', () => {
     expect(result.rentFrom).toBe('2026-09-05')
     expect(result.rentTo).toBe('2026-10-05')
     expect(result.utilityPeriod).toBe('2026-08')
+    expect(result.lines.find((l) => l.type === 'rent')?.label).toBe('Tiền phòng tháng 09/2026')
     expect(result.total).toBe(3_000_000 + 50 * 4000 + 4 * 20000)
   })
 
