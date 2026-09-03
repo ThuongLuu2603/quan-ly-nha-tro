@@ -186,13 +186,6 @@ export function InvoiceDetailPage() {
             Chia sẻ ảnh phiếu (app khác)
           </button>
 
-          {data.settings.phone && (
-            <div className="tiny muted">
-              Tin nhắn gửi từ Zalo đang đăng nhập trên máy này. Số {data.settings.phone} trên phiếu
-              là số liên hệ chủ trọ — app không gửi tin thay bạn qua máy chủ Zalo.
-            </div>
-          )}
-
           <button
             className="btn block"
             disabled={!blobRef.current}
