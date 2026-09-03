@@ -74,13 +74,11 @@ interface MonthStat {
   debt: number
 }
 
-type ChartMode = 'revenue' | 'rent' | 'electric' | 'water'
+type ChartMode = 'revenue' | 'utilities'
 
 const CHART_MODES: { key: ChartMode; label: string }[] = [
   { key: 'revenue', label: 'Doanh thu' },
-  { key: 'rent', label: 'Tiền trọ' },
-  { key: 'electric', label: 'Tiền điện' },
-  { key: 'water', label: 'Tiền nước' },
+  { key: 'utilities', label: 'Trọ · Điện · Nước' },
 ]
 
 const CHART_COLORS = ['var(--accent)', '#d97706', '#2563eb']
@@ -129,12 +127,8 @@ function RevenueChart({
     switch (mode) {
       case 'revenue':
         return [m.billed, m.collected]
-      case 'electric':
-        return [m.breakdown.electric]
-      case 'water':
-        return [m.breakdown.water]
-      case 'rent':
-        return [m.breakdown.rent]
+      case 'utilities':
+        return [m.breakdown.rent, m.breakdown.electric, m.breakdown.water]
       default:
         return [0]
     }
@@ -148,8 +142,8 @@ function RevenueChart({
   const PAD_B = 26
   const barArea = H - PAD_B
   const slot = W / months.length
-  const seriesCount = mode === 'revenue' ? 2 : 1
-  const barW = Math.min(mode === 'revenue' ? 16 : 24, (slot * 0.62) / seriesCount)
+  const seriesCount = mode === 'revenue' ? 2 : 3
+  const barW = Math.min(mode === 'revenue' ? 16 : 15, (slot * 0.66) / seriesCount)
   const groupGap = Math.min(8, slot * 0.14)
   const compact = maxValue >= 1_000_000
 
@@ -369,15 +363,15 @@ export function ReportsPage() {
         <div className="chart-legend tiny muted">
           {chartMode === 'revenue' ? (
             <>
-              <span><i className="dot billed" /> Ra phiếu</span>
-              <span><i className="dot collected" /> Đã thu</span>
+              <span><i className="dot" style={{ background: 'var(--accent)', opacity: 0.35 }} /> Ra phiếu</span>
+              <span><i className="dot" style={{ background: 'var(--accent)' }} /> Đã thu</span>
             </>
           ) : (
-            <span>
-              {chartMode === 'rent' && 'Tiền trọ theo tháng'}
-              {chartMode === 'electric' && 'Tiền điện theo tháng'}
-              {chartMode === 'water' && 'Tiền nước theo tháng'}
-            </span>
+            <>
+              <span><i className="dot" style={{ background: CHART_COLORS[0] }} /> Tiền trọ</span>
+              <span><i className="dot" style={{ background: CHART_COLORS[1] }} /> Tiền điện</span>
+              <span><i className="dot" style={{ background: CHART_COLORS[2] }} /> Tiền nước</span>
+            </>
           )}
         </div>
         <RevenueChart months={months} year={year} mode={chartMode} showValues={showValues} />
