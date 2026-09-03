@@ -74,6 +74,21 @@ interface MonthStat {
   debt: number
 }
 
+type ChartMode = 'revenue' | 'rent' | 'electric' | 'water'
+
+const CHART_MODES: { key: ChartMode; label: string }[] = [
+  { key: 'revenue', label: 'Doanh thu' },
+  { key: 'rent', label: 'Tiền trọ' },
+  { key: 'electric', label: 'Tiền điện' },
+  { key: 'water', label: 'Tiền nước' },
+]
+
+const CHART_COLORS = ['var(--accent)', '#d97706', '#2563eb']
+
+function barColor(index: number): string {
+  return CHART_COLORS[index] ?? 'var(--accent)'
+}
+
 function usageKwhOf(invoices: Invoice[]): number {
   let kwh = 0
   for (const invoice of invoices) {
@@ -98,21 +113,54 @@ function usageM3Of(invoices: Invoice[]): number {
   return Math.round(m3)
 }
 
-/** Biểu đồ cột SVG doanh thu theo tháng — không cần thư viện ngoài. */
-function RevenueChart({ months, year }: { months: MonthStat[]; year: number }) {
-  const maxValue = Math.max(...months.map((m) => Math.max(m.billed, m.collected)), 1)
+/** Biểu đồ cột SVG theo tháng — chọn chỉ số để xem. */
+function RevenueChart({
+  months,
+  year,
+  mode,
+  showValues,
+}: {
+  months: MonthStat[]
+  year: number
+  mode: ChartMode
+  showValues: boolean
+}) {
+  const valueOf = (m: MonthStat): number[] => {
+    switch (mode) {
+      case 'revenue':
+        return [m.billed, m.collected]
+      case 'electric':
+        return [m.breakdown.electric]
+      case 'water':
+        return [m.breakdown.water]
+      case 'rent':
+        return [m.breakdown.rent]
+      default:
+        return [0]
+    }
+  }
+
+  const maxValue = Math.max(...months.flatMap(valueOf), 1)
   const current = dt.periodOf(dt.today())
   const W = 720
-  const H = 190
+  const H = 200
   const PAD_L = 4
   const PAD_B = 26
   const barArea = H - PAD_B
   const slot = W / months.length
-  const barW = Math.min(18, slot * 0.52)
-  const gap = Math.min(6, slot * 0.14)
+  const seriesCount = mode === 'revenue' ? 2 : 1
+  const barW = Math.min(mode === 'revenue' ? 16 : 24, (slot * 0.62) / seriesCount)
+  const groupGap = Math.min(8, slot * 0.14)
+  const compact = maxValue >= 1_000_000
+
+  const fmt = (v: number): string => {
+    if (v <= 0) return ''
+    if (compact) return `${Math.round(v / 100_000) / 10}tr`
+    return `${Math.round(v / 1000)}k`
+  }
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="revenue-chart" role="img" aria-label={`Doanh thu năm ${year}`}>
+    <svg viewBox={`0 0 ${W} ${H}`} className="revenue-chart" role="img" aria-label={`Biểu đồ năm ${year}`}>
       {[0.25, 0.5, 0.75, 1].map((t) => (
         <line
           key={t}
@@ -126,22 +174,39 @@ function RevenueChart({ months, year }: { months: MonthStat[]; year: number }) {
         />
       ))}
       {months.map((m, index) => {
-        const x = PAD_L + index * slot + (slot - barW * 2 - gap) / 2
-        const bh = (v: number) => Math.max(0, (v / maxValue) * (barArea - 8))
-        const billedH = bh(m.billed)
-        const collectedH = bh(m.collected)
+        const values = valueOf(m)
+        const groupW = barW * values.length + groupGap * (values.length - 1)
+        const x = PAD_L + index * slot + (slot - groupW) / 2
+        const bh = (v: number) => Math.max(0, (v / maxValue) * (barArea - 22))
         const isActive = m.period === current
         const hasData = m.count > 0
         return (
           <g key={m.period}>
-            {hasData && m.billed > 0 && (
-              <rect x={x} y={barArea - billedH + 4} width={barW} height={billedH} rx={3} fill="var(--accent)" opacity={0.35} />
-            )}
-            {hasData && m.collected > 0 && (
-              <rect x={x + barW + gap} y={barArea - collectedH + 4} width={barW} height={collectedH} rx={3} fill="var(--accent)" />
-            )}
+            {values.map((v, vi) => {
+              const h = bh(v)
+              if (!hasData || v <= 0) return null
+              const bx = x + vi * (barW + groupGap)
+              const by = barArea - h + 4
+              return (
+                <g key={vi}>
+                  <rect x={bx} y={by} width={barW} height={h} rx={3} fill={barColor(vi)} />
+                  {showValues && (
+                    <text
+                      x={bx + barW / 2}
+                      y={by - 4}
+                      textAnchor="middle"
+                      fontSize="9.5"
+                      fontWeight={600}
+                      fill="var(--muted)"
+                    >
+                      {fmt(v)}
+                    </text>
+                  )}
+                </g>
+              )
+            })}
             <text
-              x={x + barW + gap / 2}
+              x={x + groupW / 2}
               y={H - 8}
               textAnchor="middle"
               fontSize="10.5"
@@ -153,7 +218,7 @@ function RevenueChart({ months, year }: { months: MonthStat[]; year: number }) {
           </g>
         )
       })}
-      </svg>
+    </svg>
   )
 }
 
@@ -161,6 +226,8 @@ export function ReportsPage() {
   const data = useDataset()
   const [year, setYear] = useState(() => Number(dt.today().slice(0, 4)))
   const [openMonth, setOpenMonth] = useState<Period | null>(null)
+  const [chartMode, setChartMode] = useState<ChartMode>('revenue')
+  const [showValues, setShowValues] = useState(true)
 
   const roomName = useMemo(() => new Map(data.rooms.map((r) => [r.id, r.name])), [data.rooms])
   const roomById = useMemo(() => buildRoomById(data.rooms), [data.rooms])
@@ -280,12 +347,40 @@ export function ReportsPage() {
         </div>
       </div>
 
-      <Card title={`Biểu đồ doanh thu ${year}`}>
-        <div className="chart-legend tiny muted">
-          <span><i className="dot billed" /> Ra phiếu</span>
-          <span><i className="dot collected" /> Đã thu</span>
+      <Card title={`Biểu đồ ${year}`}>
+        <div className="chip-row" style={{ marginBottom: 8 }}>
+          {CHART_MODES.map((item) => (
+            <button
+              key={item.key}
+              className={chartMode === item.key ? 'chip active' : 'chip'}
+              onClick={() => setChartMode(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+          <button
+            className={showValues ? 'chip active' : 'chip'}
+            onClick={() => setShowValues((v) => !v)}
+            title="Hiện/ẩn số trên cột"
+          >
+            123
+          </button>
         </div>
-        <RevenueChart months={months} year={year} />
+        <div className="chart-legend tiny muted">
+          {chartMode === 'revenue' ? (
+            <>
+              <span><i className="dot billed" /> Ra phiếu</span>
+              <span><i className="dot collected" /> Đã thu</span>
+            </>
+          ) : (
+            <span>
+              {chartMode === 'rent' && 'Tiền trọ theo tháng'}
+              {chartMode === 'electric' && 'Tiền điện theo tháng'}
+              {chartMode === 'water' && 'Tiền nước theo tháng'}
+            </span>
+          )}
+        </div>
+        <RevenueChart months={months} year={year} mode={chartMode} showValues={showValues} />
       </Card>
 
       <Card title={`Tổng kết năm ${year}`}>
