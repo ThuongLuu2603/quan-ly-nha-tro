@@ -2,7 +2,6 @@ import { saveSettings } from '../../data/actions'
 import { useDataset } from '../../data/store'
 import { useAuth } from '../../sync/AuthProvider'
 import { SUPABASE_DEFAULT_ANON_KEY, SUPABASE_DEFAULT_URL } from '../../sync/defaults'
-import { initSupabaseFromDb } from '../../sync/supabase'
 import { Banner, Card } from '../../ui/components'
 import { Page } from '../../ui/Page'
 
@@ -15,7 +14,6 @@ export function SyncSetupPage() {
       supabaseUrl: SUPABASE_DEFAULT_URL,
       supabaseAnonKey: SUPABASE_DEFAULT_ANON_KEY,
     })
-    await initSupabaseFromDb()
     await refreshConfig()
   }
 

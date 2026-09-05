@@ -42,13 +42,13 @@ export function isSyncConfigured(settings?: {
   return resolveSupabaseCredentials(settings) !== null
 }
 
-export async function initSupabaseFromDb(): Promise<boolean> {
+export async function initSupabaseFromDb(options?: { silent?: boolean }): Promise<boolean> {
   const settings = await db.settings.get('app')
   const creds = resolveSupabaseCredentials(settings)
   if (!creds) {
     client = null
     clientFingerprint = ''
-    notifyConfigChange()
+    if (!options?.silent) notifyConfigChange()
     return false
   }
 
@@ -64,7 +64,7 @@ export async function initSupabaseFromDb(): Promise<boolean> {
       flowType: 'pkce',
     },
   })
-  notifyConfigChange()
+  if (!options?.silent) notifyConfigChange()
   return true
 }
 

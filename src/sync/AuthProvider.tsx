@@ -43,32 +43,9 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 let hooksInstalled = false
 
-function bindAuthListeners(
-  setSession: (s: Session | null) => void,
-  setLoading: (v: boolean) => void,
-): () => void {
+function bindAuthListeners(setSession: (s: Session | null) => void): () => void {
   const supabase = getSupabase()
-  if (!supabase) {
-    setLoading(false)
-    return () => undefined
-  }
-
-  const finishLoading = () => setLoading(false)
-  const timeout = window.setTimeout(finishLoading, 8_000)
-
-  void supabase.auth
-    .getSession()
-    .then(({ data }) => {
-      setSession(data.session)
-      if (data.session) {
-        void maybeSeedCloud().then(() => runSync({ fullPull: true }))
-      }
-    })
-    .catch(() => setSession(null))
-    .finally(() => {
-      window.clearTimeout(timeout)
-      finishLoading()
-    })
+  if (!supabase) return () => undefined
 
   const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
     setSession(next)
@@ -97,6 +74,20 @@ function bindAuthListeners(
   }
 }
 
+async function loadSessionAfterInit(setSession: (s: Session | null) => void): Promise<void> {
+  const supabase = getSupabase()
+  if (!supabase) {
+    setSession(null)
+    return
+  }
+  const { data } = await supabase.auth.getSession()
+  setSession(data.session)
+  if (data.session) {
+    void maybeSeedCloud().then(() => runSync({ fullPull: true }))
+    void subscribeRealtime(data.session.user.id)
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [configured, setConfigured] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -118,20 +109,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshConfig = useCallback(async () => {
     setLoading(true)
     try {
-      const ok = await initSupabaseFromDb()
+      // silent: tranh notifyConfigChange goi refreshConfig lap vo han.
+      const ok = await initSupabaseFromDb({ silent: true })
       setConfigured(ok)
       if (!ok) {
         setSession(null)
-        setLoading(false)
         return
       }
       if (!hooksInstalled) {
         installSyncHooks()
         hooksInstalled = true
       }
+      await loadSessionAfterInit(setSession)
     } catch {
       setConfigured(false)
       setSession(null)
+    } finally {
       setLoading(false)
     }
   }, [])
@@ -145,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!configured) return
-    return bindAuthListeners(setSession, setLoading)
+    return bindAuthListeners(setSession)
   }, [configured])
 
   const signInEmail = useCallback(async (email: string, password: string) => {
