@@ -182,6 +182,59 @@ function utilityLines(
   return lines
 }
 
+/**
+ * Dong dien/nuoc khi ky co thay dong hoc giua ky: tinh 2 doan
+ * (baseline -> so dong cu luc thao) + (so dau dong moi -> so hien tai),
+ * ghi ro ca hai doan vao chi tiet de khach xem phieu la minh bach.
+ */
+function utilityLinesWithReset(
+  room: Room,
+  label: string,
+  from: { electric: number; water: number },
+  to: Reading,
+): InvoiceLine[] {
+  const lines: InvoiceLine[] = []
+  const hasElectricReset = to.electricReset !== undefined
+  const hasWaterReset = to.waterReset !== undefined
+
+  if (room.electricPrice > 0) {
+    const oldKwh = hasElectricReset
+      ? Math.max(0, to.electricReset! - from.electric)
+      : Math.max(0, to.electricEnd - from.electric)
+    const newKwh = hasElectricReset ? Math.max(0, to.electricEnd - (to.electricNewStart ?? 0)) : 0
+    const kwh = oldKwh + newKwh
+    const detail = hasElectricReset
+      ? `${from.electric} → ${to.electricReset} (đồng hồ cũ) + ${to.electricNewStart ?? 0} → ${to.electricEnd} (đồng hồ mới) = ${kwh} kWh`
+      : `${from.electric} → ${to.electricEnd} = ${kwh} kWh`
+    lines.push(
+      line('electric', `Tiền điện ${label}`, kwh * room.electricPrice, {
+        detail,
+        qty: kwh,
+        unitPrice: room.electricPrice,
+      }),
+    )
+  }
+
+  if (room.waterPrice > 0) {
+    const oldM3 = hasWaterReset
+      ? Math.max(0, to.waterReset! - from.water)
+      : Math.max(0, to.waterEnd - from.water)
+    const newM3 = hasWaterReset ? Math.max(0, to.waterEnd - (to.waterNewStart ?? 0)) : 0
+    const m3 = oldM3 + newM3
+    const detail = hasWaterReset
+      ? `${from.water} → ${to.waterReset} (đồng hồ cũ) + ${to.waterNewStart ?? 0} → ${to.waterEnd} (đồng hồ mới) = ${m3} m³`
+      : `${from.water} → ${to.waterEnd} = ${m3} m³`
+    lines.push(
+      line('water', `Tiền nước ${label}`, m3 * room.waterPrice, {
+        detail,
+        qty: m3,
+        unitPrice: room.waterPrice,
+      }),
+    )
+  }
+  return lines
+}
+
 /** Phong tro thu dien nuoc theo chi so. Nha cho thue chi thu tien nha thi de ca 3 muc = 0. */
 export function roomCollectsMeteredUtilities(room: Room): boolean {
   return room.electricPrice > 0 || room.waterPrice > 0
@@ -249,15 +302,21 @@ export function buildMonthlyInvoice(input: {
       } else {
         const base = baselineFor(tenancy, readings, utilityPeriod)
         const label = dt.formatInvoiceMonthLabel(dt.invoiceMonthForUtilityPeriod(utilityPeriod))
-        lines.push(
-          ...utilityLines(room, label, base, {
-            electric: reading.electricEnd,
-            water: reading.waterEnd,
-          }),
-        )
-        if (reading.electricEnd < base.electric || reading.waterEnd < base.water) {
-          warnings.push('Chỉ số mới nhỏ hơn chỉ số cũ, kiểm tra lại trước khi gửi.')
-        }
+        lines.push(...utilityLinesWithReset(room, label, base, reading))
+        // Canh bao rieng cho tung dong: khong thay dong ho thi so moi phai >= so dau ky,
+        // co thay dong ho thi so dong cu luc thao phai >= so dau ky va so moi >= so dau dong moi.
+        const electricBad =
+          reading.electricReset !== undefined
+            ? reading.electricReset < base.electric ||
+              reading.electricEnd < (reading.electricNewStart ?? 0)
+            : reading.electricEnd < base.electric
+        const waterBad =
+          reading.waterReset !== undefined
+            ? reading.waterReset < base.water ||
+              reading.waterEnd < (reading.waterNewStart ?? 0)
+            : reading.waterEnd < base.water
+        if (electricBad) warnings.push('Số điện không hợp lệ (đồng hồ cũ/mới), kiểm tra lại.')
+        if (waterBad) warnings.push('Số nước không hợp lệ (đồng hồ cũ/mới), kiểm tra lại.')
       }
     }
   }

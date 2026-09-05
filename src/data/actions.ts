@@ -147,6 +147,14 @@ export async function saveReading(input: {
   period: Period
   electricEnd: number
   waterEnd: number
+  /** Số đồng hồ điện CŨ lúc tháo, nếu thay giữa kỳ. */
+  electricReset?: number
+  /** Số đầu đồng hồ điện MỚI (thường 0), nếu thay giữa kỳ. */
+  electricNewStart?: number
+  /** Số đồng hồ nước CŨ lúc tháo, nếu thay giữa kỳ. */
+  waterReset?: number
+  /** Số đầu đồng hồ nước MỚI (thường 0), nếu thay giữa kỳ. */
+  waterNewStart?: number
   readAt?: ISODate
 }): Promise<void> {
   assertCanMutate()
@@ -156,6 +164,10 @@ export async function saveReading(input: {
     period: input.period,
     electricEnd: input.electricEnd,
     waterEnd: input.waterEnd,
+    electricReset: input.electricReset,
+    electricNewStart: input.electricNewStart,
+    waterReset: input.waterReset,
+    waterNewStart: input.waterNewStart,
     readAt: input.readAt ?? dt.today(),
   })
   await syncAfterMutation()

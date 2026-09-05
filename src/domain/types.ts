@@ -64,6 +64,14 @@ export interface Reading {
   electricEnd: number
   waterEnd: number
   readAt: ISODate
+  /** Đồng hồ mới gắn giữa kỳ: chỉ số đồng hồ CŨ lúc tháo (điện). */
+  electricReset?: number
+  /** Đồng hồ mới gắn giữa kỳ: số đầu của đồng hồ MỚI (điện, thường 0). */
+  electricNewStart?: number
+  /** Đồng hồ mới gắn giữa kỳ: chỉ số đồng hồ CŨ lúc tháo (nước). */
+  waterReset?: number
+  /** Đồng hồ mới gắn giữa kỳ: số đầu của đồng hồ MỚI (nước, thường 0). */
+  waterNewStart?: number
 }
 
 export type InvoiceKind = 'moveIn' | 'monthly' | 'checkout' | 'adjustment'
