@@ -277,6 +277,20 @@ function CashflowTab({ year }: { year: number }) {
     [ledger.entries, ledger.opening],
   )
   const summary = ledger.summary
+  const otherOutItems = useMemo(
+    () =>
+      ledger.entries.filter(
+        (entry) => entry.direction === 'out' && entry.expenseKind === 'other',
+      ),
+    [ledger.entries],
+  )
+  const otherInItems = useMemo(
+    () =>
+      ledger.entries.filter(
+        (entry) => entry.direction === 'in' && entry.expenseKind === 'income',
+      ),
+    [ledger.entries],
+  )
 
   const rangeLabel = scope === 'year' ? `năm ${year}` : dt.formatPeriod(month)
   const openingLabel =
