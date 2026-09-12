@@ -805,6 +805,25 @@ textarea.input {
   scrollbar-width: none;
 }
 
+.chip-row.wrap {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+
+.chip-row.month-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  overflow: visible;
+  padding-bottom: 0;
+}
+
+.chip-row.month-grid .chip {
+  text-align: center;
+  padding: 8px 6px;
+  justify-content: center;
+}
+
 .chip-row::-webkit-scrollbar {
   display: none;
 }

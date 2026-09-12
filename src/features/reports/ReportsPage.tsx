@@ -354,7 +354,7 @@ function CashflowTab({ year }: { year: number }) {
         </div>
 
         {scope === 'month' && (
-          <div className="chip-row">
+          <div className="chip-row month-grid">
             {yearMonths.map((p) => (
               <button
                 key={p}
@@ -362,7 +362,7 @@ function CashflowTab({ year }: { year: number }) {
                 className={p === month ? 'chip active' : 'chip'}
                 onClick={() => setMonth(p)}
               >
-                {dt.formatPeriodShort(p)}
+                T{p.slice(5)}
               </button>
             ))}
           </div>
