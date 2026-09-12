@@ -4,9 +4,9 @@ import * as dt from './dates'
 export interface MethodCollection {
   cashAmount: number
   transferAmount: number
-  /** Số phòng có ít nhất 1 lần thu tiền mặt trong kỳ. */
+  /** Số phòng có ít nhất 1 lần thu tiền mặt trong kỳ thu. */
   cashRooms: number
-  /** Số phòng có ít nhất 1 lần thu chuyển khoản trong kỳ. */
+  /** Số phòng có ít nhất 1 lần thu chuyển khoản trong kỳ thu. */
   transferRooms: number
 }
 
@@ -15,11 +15,12 @@ export type LedgerDirection = 'in' | 'out'
 export interface LedgerEntry {
   id: string
   date: ISODate
+  /** Tháng/kỳ thu để quyết toán (tháng phát phiếu hoặc tháng chi). */
+  settlementPeriod: Period
   direction: LedgerDirection
   amount: number
   label: string
   detail?: string
-  /** Liên kết phiếu (khoản thu) hoặc chi phí. */
   source: 'payment' | 'expense'
   expenseId?: ID
   expenseKind?: ExpenseKind
@@ -41,11 +42,6 @@ export interface LedgerSummary {
   transferRooms: number
 }
 
-export interface DateRange {
-  from: ISODate
-  to: ISODate
-}
-
 export interface LedgerWindow {
   opening: number
   entries: LedgerEntry[]
@@ -53,23 +49,22 @@ export interface LedgerWindow {
   summary: LedgerSummary
 }
 
-function inRange(date: ISODate, range?: DateRange): boolean {
-  if (!range) return true
-  return date >= range.from && date <= range.to
+/** Kỳ thu của phiếu = tháng phát phiếu. */
+export function settlementPeriodOfInvoice(invoice: Invoice): Period {
+  return dt.periodOf(invoice.issueDate)
 }
 
-/** Gom thu theo phương thức theo ngày thanh toán trong một tháng. */
+export function settlementPeriodOfExpense(expense: Expense): Period {
+  return dt.periodOf(expense.date)
+}
+
+/**
+ * Gom thu theo phương thức theo kỳ thu (tháng phát phiếu),
+ * không theo ngày khách chuyển tiền.
+ */
 export function collectByMethodInPeriod(
   invoices: Invoice[],
   period: Period,
-): MethodCollection {
-  const bounds = dt.periodBounds(period)
-  return collectByMethodInRange(invoices, { from: bounds.start, to: bounds.end })
-}
-
-export function collectByMethodInRange(
-  invoices: Invoice[],
-  range: DateRange,
 ): MethodCollection {
   let cashAmount = 0
   let transferAmount = 0
@@ -77,9 +72,9 @@ export function collectByMethodInRange(
   const transferRooms = new Set<ID>()
 
   for (const invoice of invoices) {
+    if (settlementPeriodOfInvoice(invoice) !== period) continue
     for (const payment of invoice.payments) {
       if (payment.method === 'carried') continue
-      if (!inRange(payment.date, range)) continue
       if (payment.method === 'cash') {
         cashAmount += payment.amount
         if (payment.amount > 0) cashRooms.add(invoice.roomId)
@@ -114,27 +109,27 @@ export function expenseKindLabel(kind: ExpenseKind): string {
 }
 
 /**
- * Sao kê thu chi kiểu ngân hàng (toàn bộ hoặc theo khoảng ngày):
- * - Thu tiền mặt / chuyển khoản → 1 dòng Vào
- * - Chi điện / nước → 1 dòng Ra
+ * Toàn bộ dòng sao kê, gắn settlementPeriod:
+ * - Thu: theo tháng phát phiếu (kỳ thu)
+ * - Chi: theo tháng ghi chi
  */
-export function buildLedgerEntries(
+export function buildAllLedgerEntries(
   invoices: Invoice[],
   expenses: Expense[],
   roomNameOf: (roomId: ID) => string,
-  range?: DateRange,
 ): LedgerEntry[] {
   const entries: LedgerEntry[] = []
 
   for (const invoice of invoices) {
     const room = roomNameOf(invoice.roomId)
+    const settlementPeriod = settlementPeriodOfInvoice(invoice)
     for (const payment of invoice.payments) {
       if (payment.method === 'carried') continue
-      if (!inRange(payment.date, range)) continue
       const methodLabel = payment.method === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'
       entries.push({
         id: `pay:${invoice.id}:${payment.id}`,
         date: payment.date,
+        settlementPeriod,
         direction: payment.amount >= 0 ? 'in' : 'out',
         amount: Math.abs(payment.amount),
         label: payment.amount >= 0 ? `Thu ${methodLabel}` : `Hoàn ${methodLabel}`,
@@ -147,10 +142,10 @@ export function buildLedgerEntries(
   }
 
   for (const expense of expenses) {
-    if (!inRange(expense.date, range)) continue
     entries.push({
       id: `exp:${expense.id}`,
       date: expense.date,
+      settlementPeriod: settlementPeriodOfExpense(expense),
       direction: 'out',
       amount: Math.abs(expense.amount),
       label: expenseKindLabel(expense.kind),
@@ -162,6 +157,9 @@ export function buildLedgerEntries(
   }
 
   entries.sort((a, b) => {
+    if (a.settlementPeriod !== b.settlementPeriod) {
+      return a.settlementPeriod.localeCompare(b.settlementPeriod)
+    }
     if (a.date !== b.date) return a.date.localeCompare(b.date)
     return a.id.localeCompare(b.id)
   })
@@ -207,7 +205,6 @@ export function summarizeLedger(entries: LedgerEntry[]): LedgerSummary {
           otherOut += entry.amount
           break
         case undefined:
-          // Hoàn tiền / dòng ra không phải chi phí đã phân loại
           break
         default: {
           const _exhaustive: never = entry.expenseKind
@@ -231,24 +228,53 @@ export function summarizeLedger(entries: LedgerEntry[]): LedgerSummary {
   }
 }
 
-/** Cửa sổ sao kê: số dư đầu kỳ + dòng trong khoảng + số dư cuối. */
-export function buildLedgerWindow(
+function matchesSettlement(
+  entry: LedgerEntry,
+  filter: { period?: Period; year?: number },
+): boolean {
+  if (filter.period) return entry.settlementPeriod === filter.period
+  if (filter.year !== undefined) return entry.settlementPeriod.startsWith(String(filter.year))
+  return true
+}
+
+/**
+ * Quyết toán theo tháng/kỳ thu (hoặc cả năm):
+ * số dư đầu = tổng các kỳ thu trước đó.
+ */
+export function buildSettlementWindow(
   invoices: Invoice[],
   expenses: Expense[],
   roomNameOf: (roomId: ID) => string,
-  range: DateRange,
+  filter: { period: Period } | { year: number },
 ): LedgerWindow {
-  const all = buildLedgerEntries(invoices, expenses, roomNameOf)
+  const all = buildAllLedgerEntries(invoices, expenses, roomNameOf)
   let opening = 0
   const entries: LedgerEntry[] = []
+
+  const period = 'period' in filter ? filter.period : undefined
+  const year = 'year' in filter ? filter.year : undefined
+
   for (const entry of all) {
-    if (entry.date < range.from) {
-      opening += netOfEntry(entry)
+    if (period) {
+      if (entry.settlementPeriod < period) {
+        opening += netOfEntry(entry)
+        continue
+      }
+      if (entry.settlementPeriod === period) entries.push(entry)
       continue
     }
-    if (entry.date > range.to) continue
-    entries.push(entry)
+
+    // Cả năm: số dư đầu = trước ngày 01/01 năm đó
+    if (year !== undefined) {
+      const yearStart = `${year}-01`
+      if (entry.settlementPeriod < yearStart) {
+        opening += netOfEntry(entry)
+        continue
+      }
+      if (entry.settlementPeriod.startsWith(String(year))) entries.push(entry)
+    }
   }
+
   const summary = summarizeLedger(entries)
   return {
     opening,
@@ -258,7 +284,17 @@ export function buildLedgerWindow(
   }
 }
 
-/** Số dư chạy theo từng dòng (sau khi áp dụng dòng đó). */
+/** @deprecated dùng buildSettlementWindow — giữ alias để tương thích tạm. */
+export function buildLedgerWindow(
+  invoices: Invoice[],
+  expenses: Expense[],
+  roomNameOf: (roomId: ID) => string,
+  range: { from: ISODate; to: ISODate },
+): LedgerWindow {
+  const period = dt.periodOf(range.from)
+  return buildSettlementWindow(invoices, expenses, roomNameOf, { period })
+}
+
 export function withRunningBalance(
   entries: LedgerEntry[],
   opening = 0,
@@ -270,11 +306,24 @@ export function withRunningBalance(
   })
 }
 
-export function rangeForPeriod(period: Period): DateRange {
+/** @deprecated */
+export function buildLedgerEntries(
+  invoices: Invoice[],
+  expenses: Expense[],
+  roomNameOf: (roomId: ID) => string,
+  range?: { from: ISODate; to: ISODate },
+): LedgerEntry[] {
+  const all = buildAllLedgerEntries(invoices, expenses, roomNameOf)
+  if (!range) return all
+  const period = dt.periodOf(range.from)
+  return all.filter((e) => matchesSettlement(e, { period }))
+}
+
+export function rangeForPeriod(period: Period): { from: ISODate; to: ISODate } {
   const bounds = dt.periodBounds(period)
   return { from: bounds.start, to: bounds.end }
 }
 
-export function rangeForYear(year: number): DateRange {
+export function rangeForYear(year: number): { from: ISODate; to: ISODate } {
   return { from: `${year}-01-01`, to: `${year}-12-31` }
 }

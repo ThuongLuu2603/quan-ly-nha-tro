@@ -12,12 +12,9 @@ import {
   type RevenueBreakdown,
 } from '../../domain/billing'
 import {
-  buildLedgerWindow,
+  buildSettlementWindow,
   collectByMethodInPeriod,
-  rangeForPeriod,
-  rangeForYear,
   withRunningBalance,
-  type DateRange,
 } from '../../domain/cashflow'
 import * as dt from '../../domain/dates'
 import { buildRoomById, compareInvoicesByRoom } from '../../domain/roomOrder'
@@ -238,7 +235,7 @@ function RevenueChart({
   )
 }
 
-type LedgerScope = 'month' | 'year' | 'range'
+type LedgerScope = 'month' | 'year'
 
 function CashflowTab({ year }: { year: number }) {
   const data = useDataset()
@@ -252,10 +249,8 @@ function CashflowTab({ year }: { year: number }) {
   const currentPeriod = dt.periodOf(dt.today())
   const [scope, setScope] = useState<LedgerScope>('month')
   const [month, setMonth] = useState<Period>(() =>
-    currentPeriod.startsWith(String(year)) ? currentPeriod : `${year}-01`,
+    currentPeriod.startsWith(String(year)) ? currentPeriod : (`${year}-01` as Period),
   )
-  const [rangeFrom, setRangeFrom] = useState<ISODate>(() => dt.periodBounds(currentPeriod).start)
-  const [rangeTo, setRangeTo] = useState<ISODate>(() => dt.today())
 
   useEffect(() => {
     if (month.startsWith(String(year))) return
@@ -264,26 +259,17 @@ function CashflowTab({ year }: { year: number }) {
   }, [year, month])
 
   const roomById = useMemo(() => new Map(data.rooms.map((r) => [r.id, r.name])), [data.rooms])
-
   const yearMonths = useMemo(() => dt.periodRange(`${year}-01`, `${year}-12`), [year])
-
-  const range: DateRange = useMemo(() => {
-    if (scope === 'year') return rangeForYear(year)
-    if (scope === 'month') return rangeForPeriod(month)
-    const from = rangeFrom <= rangeTo ? rangeFrom : rangeTo
-    const to = rangeFrom <= rangeTo ? rangeTo : rangeFrom
-    return { from, to }
-  }, [scope, year, month, rangeFrom, rangeTo])
 
   const ledger = useMemo(
     () =>
-      buildLedgerWindow(
+      buildSettlementWindow(
         data.invoices,
         data.expenses,
         (roomId) => roomById.get(roomId) ?? 'Phòng',
-        range,
+        scope === 'year' ? { year } : { period: month },
       ),
-    [data.invoices, data.expenses, roomById, range],
+    [data.invoices, data.expenses, roomById, scope, year, month],
   )
 
   const rows = useMemo(
@@ -292,15 +278,13 @@ function CashflowTab({ year }: { year: number }) {
   )
   const summary = ledger.summary
 
-  const rangeLabel =
-    scope === 'year'
-      ? `năm ${year}`
-      : scope === 'month'
-        ? dt.formatPeriod(month)
-        : `${dt.formatDate(range.from)} – ${dt.formatDate(range.to)}`
+  const rangeLabel = scope === 'year' ? `năm ${year}` : dt.formatPeriod(month)
+  const openingLabel =
+    scope === 'year' ? `Số dư đầu năm ${year}` : `Số dư đầu ${dt.formatPeriodShort(month)}`
 
   const saveExpense = async () => {
     if (amount <= 0 || saving) return
+    if (kind === 'other' && !note.trim()) return
     setSaving(true)
     try {
       await addExpense({
@@ -347,8 +331,12 @@ function CashflowTab({ year }: { year: number }) {
 
   return (
     <>
-      <Card title="Chọn giai đoạn">
-        <div className="chip-row" style={{ marginBottom: 10 }}>
+      <Card title="Quyết toán theo tháng">
+        <Banner tone="info">
+          Thu theo <strong>kỳ thu</strong> (tháng phát phiếu). Chi điện/nước/khác theo tháng bạn ghi
+          chi. Chọn tháng để xem quyết toán tháng đó.
+        </Banner>
+        <div className="chip-row" style={{ marginTop: 10, marginBottom: 10 }}>
           <button
             type="button"
             className={scope === 'month' ? 'chip active' : 'chip'}
@@ -362,13 +350,6 @@ function CashflowTab({ year }: { year: number }) {
             onClick={() => setScope('year')}
           >
             Cả năm {year}
-          </button>
-          <button
-            type="button"
-            className={scope === 'range' ? 'chip active' : 'chip'}
-            onClick={() => setScope('range')}
-          >
-            Khoảng ngày
           </button>
         </div>
 
@@ -387,19 +368,8 @@ function CashflowTab({ year }: { year: number }) {
           </div>
         )}
 
-        {scope === 'range' && (
-          <div className="grid-2">
-            <Field label="Từ ngày">
-              <DateInput value={rangeFrom} onChange={(v) => setRangeFrom(v as ISODate)} />
-            </Field>
-            <Field label="Đến ngày">
-              <DateInput value={rangeTo} onChange={(v) => setRangeTo(v as ISODate)} />
-            </Field>
-          </div>
-        )}
-
         <div className="tiny muted" style={{ marginTop: 8 }}>
-          Đang xem: <strong>{rangeLabel}</strong>
+          Đang quyết toán: <strong>{rangeLabel}</strong>
         </div>
       </Card>
 
@@ -430,7 +400,7 @@ function CashflowTab({ year }: { year: number }) {
       <Card title={`Tóm tắt · ${rangeLabel}`}>
         <div className="stack tight">
           <div className="row between small">
-            <span className="muted">Số dư đầu kỳ</span>
+            <span className="muted">{openingLabel}</span>
             <span className="num">{formatMoney(ledger.opening)} đ</span>
           </div>
           <div className="row between small">
@@ -554,8 +524,10 @@ function CashflowTab({ year }: { year: number }) {
               <span className="right">Số dư</span>
             </div>
             <div className="ledger-row">
-              <span className="tiny muted">{dt.formatDate(range.from)}</span>
-              <span className="small strong">Số dư đầu kỳ</span>
+              <span className="tiny muted">
+                {scope === 'year' ? `01/01/${year}` : dt.formatDate(dt.periodBounds(month).start)}
+              </span>
+              <span className="small strong">{openingLabel}</span>
               <span />
               <span />
               <span className="num tiny right strong">{formatMoney(ledger.opening)}</span>
