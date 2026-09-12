@@ -109,21 +109,48 @@ describe('quyet toan theo thang / ky thu', () => {
     const window = buildSettlementWindow(invoices, expenses, () => 'Nhà Trước', {
       period: '2026-09',
     })
+    // 2 thu (mat + CK) + 1 chi tien mat cap + 2 chi dien/nuoc
     expect(window.entries.filter((e) => e.direction === 'in')).toHaveLength(2)
-    expect(window.entries.filter((e) => e.direction === 'out')).toHaveLength(2)
+    expect(window.entries.filter((e) => e.isCashWithdraw)).toHaveLength(1)
+    expect(window.entries.filter((e) => e.direction === 'out')).toHaveLength(3)
 
     const summary = window.summary
     expect(summary.totalIn).toBe(4_000_000)
-    expect(summary.totalOut).toBe(1_000_000)
-    expect(summary.balance).toBe(3_000_000)
     expect(summary.cashIn).toBe(3_000_000)
+    expect(summary.cashOut).toBe(3_000_000)
     expect(summary.transferIn).toBe(1_000_000)
     expect(summary.electricOut).toBe(800_000)
     expect(summary.waterOut).toBe(200_000)
+    expect(summary.operatingOut).toBe(1_000_000)
     expect(summary.otherOut).toBe(0)
+    // So du ky = CK 1tr - chi van hanh 1tr (tien mat huy nhau)
+    expect(summary.balance).toBe(0)
+    expect(window.closing).toBe(0)
 
     const withBal = withRunningBalance(window.entries, window.opening)
-    expect(withBal[withBal.length - 1]?.balance).toBe(3_000_000)
+    expect(withBal[withBal.length - 1]?.balance).toBe(0)
+  })
+
+  it('moi lan thu tien mat sinh them 1 dong Ra cung so tien', () => {
+    const invoices = [
+      invoice({
+        id: 'i1',
+        roomId: 'r1',
+        issueDate: '2026-09-01',
+        payments: [{ id: 'p1', date: '2026-09-02', amount: 500_000, method: 'cash' }],
+      }),
+    ]
+    const entries = buildAllLedgerEntries(invoices, [], () => 'Phòng 01').filter(
+      (e) => e.settlementPeriod === '2026-09',
+    )
+    expect(entries).toHaveLength(2)
+    expect(entries[0]?.label).toBe('Thu Tiền mặt')
+    expect(entries[0]?.direction).toBe('in')
+    expect(entries[0]?.amount).toBe(500_000)
+    expect(entries[1]?.label).toBe('Chi tiền mặt')
+    expect(entries[1]?.direction).toBe('out')
+    expect(entries[1]?.amount).toBe(500_000)
+    expect(entries[1]?.isCashWithdraw).toBe(true)
   })
 
   it('chi khac tinh dung otherOut', () => {
@@ -172,10 +199,12 @@ describe('quyet toan theo thang / ky thu', () => {
     ]
 
     const window = buildSettlementWindow(invoices, expenses, () => 'P01', { period: '2026-09' })
-    expect(window.opening).toBe(5_000_000)
-    expect(window.entries).toHaveLength(2)
+    // T08: 5tr mat vao + 5tr rut = mo du 0; T09: 1tr mat + 1tr rut + 0.4tr dien
+    expect(window.opening).toBe(0)
+    expect(window.entries.filter((e) => e.isCashWithdraw || e.direction === 'in')).toHaveLength(2)
     expect(window.summary.totalIn).toBe(1_000_000)
-    expect(window.summary.totalOut).toBe(400_000)
-    expect(window.closing).toBe(5_600_000)
+    expect(window.summary.cashOut).toBe(1_000_000)
+    expect(window.summary.totalOut).toBe(1_400_000)
+    expect(window.closing).toBe(-400_000)
   })
 })

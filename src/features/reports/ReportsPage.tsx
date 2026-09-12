@@ -333,8 +333,9 @@ function CashflowTab({ year }: { year: number }) {
     <>
       <Card title="Quyết toán theo tháng">
         <Banner tone="info">
-          Thu theo <strong>kỳ thu</strong> (tháng phát phiếu). Chi điện/nước/khác theo tháng bạn ghi
-          chi. Chọn tháng để xem quyết toán tháng đó.
+          Thu theo <strong>kỳ thu</strong> (tháng phát phiếu). Mỗi lần thu <strong>tiền mặt</strong> ghi
+          1 dòng Vào + 1 dòng Ra (rút quỹ). Chuyển khoản chỉ 1 dòng Vào. Chi điện/nước/khác theo tháng
+          ghi chi.
         </Banner>
         <div className="chip-row" style={{ marginTop: 10, marginBottom: 10 }}>
           <button
@@ -381,9 +382,9 @@ function CashflowTab({ year }: { year: number }) {
           </div>
         </div>
         <div className="stat">
-          <div className="label">Chi kỳ này</div>
+          <div className="label">Chi vận hành</div>
           <div className="value" style={{ color: 'var(--danger)' }}>
-            {formatMoney(summary.totalOut)}
+            {formatMoney(summary.operatingOut)}
           </div>
         </div>
         <div className="stat">
@@ -408,6 +409,12 @@ function CashflowTab({ year }: { year: number }) {
             <span className="num">
               {formatMoney(summary.cashIn)} đ
               <span className="muted"> · {summary.cashRooms} phòng</span>
+            </span>
+          </div>
+          <div className="row between small">
+            <span className="muted">Chi tiền mặt (rút quỹ)</span>
+            <span className="num" style={{ color: 'var(--danger)' }}>
+              {formatMoney(summary.cashOut)} đ
             </span>
           </div>
           <div className="row between small">
@@ -447,8 +454,8 @@ function CashflowTab({ year }: { year: number }) {
 
       <Card title="Ghi khoản chi">
         <Banner tone="info">
-          Mỗi lần thu tiền mặt hoặc chuyển khoản tự thành <strong>1 dòng Vào</strong>. Chi điện / nước
-          / khác bạn nhập ở đây thành <strong>1 dòng Ra</strong>.
+          Mỗi lần thu tiền mặt tự thành <strong>1 dòng Vào + 1 dòng Ra</strong>. Thu chuyển khoản chỉ{' '}
+          <strong>1 dòng Vào</strong>. Chi điện / nước / khác nhập ở đây thành dòng Ra.
         </Banner>
         <div className="stack" style={{ marginTop: 12 }}>
           <div className="chip-row">

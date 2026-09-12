@@ -22,6 +22,8 @@ export interface LedgerEntry {
   label: string
   detail?: string
   source: 'payment' | 'expense'
+  /** Dòng Ra cặp với thu tiền mặt (rút khỏi quỹ). */
+  isCashWithdraw?: boolean
   expenseId?: ID
   expenseKind?: ExpenseKind
   invoiceId?: ID
@@ -34,10 +36,14 @@ export interface LedgerSummary {
   /** Chênh lệch trong kỳ (thu − chi), chưa cộng số dư đầu. */
   balance: number
   cashIn: number
+  /** Rút tiền mặt khỏi quỹ (cặp 1-1 với thu tiền mặt). */
+  cashOut: number
   transferIn: number
   electricOut: number
   waterOut: number
   otherOut: number
+  /** Chi vận hành (điện + nước + khác), không gồm rút tiền mặt. */
+  operatingOut: number
   cashRooms: number
   transferRooms: number
 }
@@ -111,7 +117,8 @@ export function expenseKindLabel(kind: ExpenseKind): string {
 /**
  * Toàn bộ dòng sao kê, gắn settlementPeriod:
  * - Thu: theo tháng phát phiếu (kỳ thu)
- * - Chi: theo tháng ghi chi
+ * - Thu tiền mặt: thêm 1 dòng Ra cùng số tiền (rút khỏi quỹ)
+ * - Chi điện/nước/khác: theo tháng ghi chi
  */
 export function buildAllLedgerEntries(
   invoices: Invoice[],
@@ -125,19 +132,54 @@ export function buildAllLedgerEntries(
     const settlementPeriod = settlementPeriodOfInvoice(invoice)
     for (const payment of invoice.payments) {
       if (payment.method === 'carried') continue
-      const methodLabel = payment.method === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'
-      entries.push({
-        id: `pay:${invoice.id}:${payment.id}`,
-        date: payment.date,
-        settlementPeriod,
-        direction: payment.amount >= 0 ? 'in' : 'out',
-        amount: Math.abs(payment.amount),
-        label: payment.amount >= 0 ? `Thu ${methodLabel}` : `Hoàn ${methodLabel}`,
-        detail: `${room} · ${invoice.code}${payment.note ? ` · ${payment.note}` : ''}`,
-        source: 'payment',
-        invoiceId: invoice.id,
-        roomId: invoice.roomId,
-      })
+      const isCash = payment.method === 'cash'
+      const methodLabel = isCash ? 'Tiền mặt' : 'Chuyển khoản'
+      const amount = Math.abs(payment.amount)
+      const detail = `${room} · ${invoice.code}${payment.note ? ` · ${payment.note}` : ''}`
+
+      if (payment.amount >= 0) {
+        entries.push({
+          id: `pay:${invoice.id}:${payment.id}`,
+          date: payment.date,
+          settlementPeriod,
+          direction: 'in',
+          amount,
+          label: `Thu ${methodLabel}`,
+          detail,
+          source: 'payment',
+          invoiceId: invoice.id,
+          roomId: invoice.roomId,
+        })
+        // Tiền mặt vào quỹ rồi rút ra ngay — ghi rõ 1 dòng Ra tương ứng.
+        if (isCash && amount > 0) {
+          entries.push({
+            id: `pay:${invoice.id}:${payment.id}:cash-out`,
+            date: payment.date,
+            settlementPeriod,
+            direction: 'out',
+            amount,
+            label: 'Chi tiền mặt',
+            detail: `Rút quỹ · ${detail}`,
+            source: 'payment',
+            isCashWithdraw: true,
+            invoiceId: invoice.id,
+            roomId: invoice.roomId,
+          })
+        }
+      } else {
+        entries.push({
+          id: `pay:${invoice.id}:${payment.id}`,
+          date: payment.date,
+          settlementPeriod,
+          direction: 'out',
+          amount,
+          label: `Hoàn ${methodLabel}`,
+          detail,
+          source: 'payment',
+          invoiceId: invoice.id,
+          roomId: invoice.roomId,
+        })
+      }
     }
   }
 
@@ -161,6 +203,7 @@ export function buildAllLedgerEntries(
       return a.settlementPeriod.localeCompare(b.settlementPeriod)
     }
     if (a.date !== b.date) return a.date.localeCompare(b.date)
+    // Cặp thu tiền mặt + chi tiền mặt đứng liền nhau.
     return a.id.localeCompare(b.id)
   })
   return entries
@@ -174,6 +217,7 @@ export function summarizeLedger(entries: LedgerEntry[]): LedgerSummary {
   let totalIn = 0
   let totalOut = 0
   let cashIn = 0
+  let cashOut = 0
   let transferIn = 0
   let electricOut = 0
   let waterOut = 0
@@ -194,6 +238,10 @@ export function summarizeLedger(entries: LedgerEntry[]): LedgerSummary {
       }
     } else {
       totalOut += entry.amount
+      if (entry.isCashWithdraw) {
+        cashOut += entry.amount
+        continue
+      }
       switch (entry.expenseKind) {
         case 'electric':
           electricOut += entry.amount
@@ -214,15 +262,18 @@ export function summarizeLedger(entries: LedgerEntry[]): LedgerSummary {
     }
   }
 
+  const operatingOut = electricOut + waterOut + otherOut
   return {
     totalIn,
     totalOut,
     balance: totalIn - totalOut,
     cashIn,
+    cashOut,
     transferIn,
     electricOut,
     waterOut,
     otherOut,
+    operatingOut,
     cashRooms: cashRooms.size,
     transferRooms: transferRooms.size,
   }
