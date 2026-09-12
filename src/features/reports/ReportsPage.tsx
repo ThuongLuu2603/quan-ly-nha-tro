@@ -251,12 +251,19 @@ function CashflowTab({ year }: { year: number }) {
   const [month, setMonth] = useState<Period>(() =>
     currentPeriod.startsWith(String(year)) ? currentPeriod : (`${year}-01` as Period),
   )
+  const [expandOtherIn, setExpandOtherIn] = useState(false)
+  const [expandOtherOut, setExpandOtherOut] = useState(false)
 
   useEffect(() => {
     if (month.startsWith(String(year))) return
     const todayPeriod = dt.periodOf(dt.today())
     setMonth((todayPeriod.startsWith(String(year)) ? todayPeriod : `${year}-01`) as Period)
   }, [year, month])
+
+  useEffect(() => {
+    setExpandOtherIn(false)
+    setExpandOtherOut(false)
+  }, [scope, month, year])
 
   const roomById = useMemo(() => new Map(data.rooms.map((r) => [r.id, r.name])), [data.rooms])
   const yearMonths = useMemo(() => dt.periodRange(`${year}-01`, `${year}-12`), [year])
@@ -443,23 +450,50 @@ function CashflowTab({ year }: { year: number }) {
               <span className="muted"> · {summary.transferRooms} phòng</span>
             </span>
           </div>
-          <div className="row between small">
-            <span className="muted">Thu khác</span>
+          <div
+            className="row between small"
+            role={otherInItems.length > 0 ? 'button' : undefined}
+            tabIndex={otherInItems.length > 0 ? 0 : undefined}
+            onClick={
+              otherInItems.length > 0 ? () => setExpandOtherIn((open) => !open) : undefined
+            }
+            onKeyDown={
+              otherInItems.length > 0
+                ? (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setExpandOtherIn((open) => !open)
+                    }
+                  }
+                : undefined
+            }
+            style={otherInItems.length > 0 ? { cursor: 'pointer' } : undefined}
+          >
+            <span className="muted">
+              Thu khác
+              {otherInItems.length > 0 ? (
+                <span className="tiny">
+                  {' '}
+                  · {otherInItems.length} khoản {expandOtherIn ? '▾' : '▸'}
+                </span>
+              ) : null}
+            </span>
             <span className="num" style={{ color: 'var(--ok)' }}>
               {formatMoney(summary.otherIn)} đ
             </span>
           </div>
-          {otherInItems.map((item) => (
-            <div className="row between small" key={item.id} style={{ paddingLeft: 12 }}>
-              <span className="muted tiny">
-                {dt.formatDate(item.date)}
-                {item.detail ? ` · ${item.detail}` : ''}
-              </span>
-              <span className="num tiny" style={{ color: 'var(--ok)' }}>
-                {formatMoney(item.amount)} đ
-              </span>
-            </div>
-          ))}
+          {expandOtherIn &&
+            otherInItems.map((item) => (
+              <div className="row between small" key={item.id} style={{ paddingLeft: 12 }}>
+                <span className="muted tiny" style={{ fontStyle: 'italic' }}>
+                  {dt.formatDate(item.date)}
+                  {item.detail ? ` · ${item.detail}` : ''}
+                </span>
+                <span className="num tiny" style={{ color: 'var(--ok)', fontStyle: 'italic' }}>
+                  {formatMoney(item.amount)} đ
+                </span>
+              </div>
+            ))}
           <div className="row between small">
             <span className="muted">Chi tiền điện</span>
             <span className="num" style={{ color: 'var(--danger)' }}>
@@ -472,28 +506,50 @@ function CashflowTab({ year }: { year: number }) {
               {formatMoney(summary.waterOut)} đ
             </span>
           </div>
-          <div className="row between small">
+          <div
+            className="row between small"
+            role={otherOutItems.length > 0 ? 'button' : undefined}
+            tabIndex={otherOutItems.length > 0 ? 0 : undefined}
+            onClick={
+              otherOutItems.length > 0 ? () => setExpandOtherOut((open) => !open) : undefined
+            }
+            onKeyDown={
+              otherOutItems.length > 0
+                ? (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setExpandOtherOut((open) => !open)
+                    }
+                  }
+                : undefined
+            }
+            style={otherOutItems.length > 0 ? { cursor: 'pointer' } : undefined}
+          >
             <span className="muted">
               Chi khác
               {otherOutItems.length > 0 ? (
-                <span className="tiny"> · {otherOutItems.length} khoản</span>
+                <span className="tiny">
+                  {' '}
+                  · {otherOutItems.length} khoản {expandOtherOut ? '▾' : '▸'}
+                </span>
               ) : null}
             </span>
             <span className="num" style={{ color: 'var(--danger)' }}>
               {formatMoney(summary.otherOut)} đ
             </span>
           </div>
-          {otherOutItems.map((item) => (
-            <div className="row between small" key={item.id} style={{ paddingLeft: 12 }}>
-              <span className="muted tiny">
-                {dt.formatDate(item.date)}
-                {item.detail ? ` · ${item.detail}` : ' · Chi khác'}
-              </span>
-              <span className="num tiny" style={{ color: 'var(--danger)' }}>
-                {formatMoney(item.amount)} đ
-              </span>
-            </div>
-          ))}
+          {expandOtherOut &&
+            otherOutItems.map((item) => (
+              <div className="row between small" key={item.id} style={{ paddingLeft: 12 }}>
+                <span className="muted tiny" style={{ fontStyle: 'italic' }}>
+                  {dt.formatDate(item.date)}
+                  {item.detail ? ` · ${item.detail}` : ' · Chi khác'}
+                </span>
+                <span className="num tiny" style={{ color: 'var(--danger)', fontStyle: 'italic' }}>
+                  {formatMoney(item.amount)} đ
+                </span>
+              </div>
+            ))}
           <div
             className="row between"
             style={{ marginTop: 4, paddingTop: 8, borderTop: '1px solid var(--line)' }}
