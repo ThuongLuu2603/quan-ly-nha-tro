@@ -79,20 +79,30 @@ function averageUsage(data: Dataset, roomId: ID, before: Period): number | null 
 function MeterResetPanel({
   kind,
   draft,
+  baseline,
   onPatch,
   onCancel,
   onApply,
 }: {
   kind: 'electric' | 'water'
   draft: Draft
+  /** Chỉ số đầu kỳ / bàn giao — để gợi ý số lúc tháo. */
+  baseline: number
   onPatch: (patch: Partial<Draft>) => void
   onCancel: () => void
-  onApply: () => void
+  onApply: (values: { oldReading: number; newStart: number }) => void
 }) {
   const isElectric = kind === 'electric'
   const label = isElectric ? 'điện' : 'nước'
   const oldValue = isElectric ? draft.electricReset : draft.waterReset
   const newStart = isElectric ? draft.electricNewStart : draft.waterNewStart
+  const current = isElectric ? draft.electric : draft.water
+
+  const handleApply = () => {
+    if (oldValue === null) return
+    const start = newStart ?? 0
+    onApply({ oldReading: oldValue, newStart: start })
+  }
 
   return (
     <div
@@ -109,31 +119,45 @@ function MeterResetPanel({
         Thay đồng hồ {label}
       </div>
       <div className="tiny muted" style={{ marginBottom: 8 }}>
-        Nhập <strong>số đồng hồ cũ lúc tháo</strong> và <strong>số đầu đồng hồ mới</strong> (thường 0).
+        <strong>Trái</strong> = số đồng hồ <strong>cũ</strong> lúc tháo (thường ≥ {formatNumber(baseline)}
+        {current !== null ? `, đang nhập ${formatNumber(current)}` : ''}).{' '}
+        <strong>Phải</strong> = số đầu đồng hồ <strong>mới</strong> (thường 0) — không phải 0 / 0 cả hai ô.
       </div>
       <div className="meter-row" style={{ paddingBottom: 4 }}>
         <div className="tiny muted">Cũ tháo tại</div>
         <NumberInput
           value={oldValue}
+          placeholder={`≥ ${formatNumber(baseline)}`}
           onChange={(value) =>
             onPatch(isElectric ? { electricReset: value } : { waterReset: value })
           }
         />
         <NumberInput
           value={newStart}
+          placeholder="0"
           onChange={(value) =>
-            onPatch(isElectric ? { electricNewStart: value } : { waterNewStart: value })
+            onPatch(
+              isElectric
+                ? { electricNewStart: value ?? 0 }
+                : { waterNewStart: value ?? 0 },
+            )
           }
         />
       </div>
       <div className="tiny muted" style={{ margin: '4px 0 8px' }}>
-        Trái = số lúc tháo · Phải = số đầu đồng hồ mới
+        Sau khi áp dụng, ô {label} phía trên = chỉ số đồng hồ <strong>mới</strong> hiện tại.
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button className="btn sm" onClick={onCancel}>
+        <button type="button" className="btn sm" onClick={onCancel}>
           Bỏ
         </button>
-        <button className="btn primary sm" style={{ flex: 1 }} onClick={onApply}>
+        <button
+          type="button"
+          className="btn primary sm"
+          style={{ flex: 1 }}
+          disabled={oldValue === null}
+          onClick={handleApply}
+        >
           Áp dụng &amp; lưu
         </button>
       </div>
@@ -194,7 +218,7 @@ export function MeterPage() {
     setDrafts((prev) => ({ ...prev, [roomId]: { ...(prev[roomId] ?? EMPTY_DRAFT), ...patch } }))
   }
 
-  const commit = async (room: Room, draft: Draft) => {
+  const commit = async (room: Room, draft: Draft, options?: { quiet?: boolean }) => {
     if (draft.electric === null || draft.water === null) return
     const existing = readingOf(data, room.id, utilityPeriod)
     if (
@@ -218,7 +242,7 @@ export function MeterPage() {
       waterReset: draft.waterReset ?? undefined,
       waterNewStart: draft.waterReset !== null ? (draft.waterNewStart ?? 0) : undefined,
     })
-    toast(`Đã lưu chỉ số ${room.name}`)
+    if (!options?.quiet) toast(`Đã lưu chỉ số ${room.name}`)
   }
 
   const missing = rooms.filter((room) => !readingOf(data, room.id, utilityPeriod)).length
@@ -324,14 +348,13 @@ export function MeterPage() {
                 const electricBad =
                   base !== null && draft.electric !== null
                     ? hasElectricReset
-                      ? (draft.electricReset ?? 0) < base.electric ||
-                        draft.electric < (draft.electricNewStart ?? 0)
+                      ? draft.electric < (draft.electricNewStart ?? 0)
                       : draft.electric < base.electric
                     : false
                 const waterBad =
                   base !== null && draft.water !== null
                     ? hasWaterReset
-                      ? (draft.waterReset ?? 0) < base.water || draft.water < (draft.waterNewStart ?? 0)
+                      ? draft.water < (draft.waterNewStart ?? 0)
                       : draft.water < base.water
                     : false
                 const backwards = electricBad || waterBad
@@ -353,8 +376,12 @@ export function MeterPage() {
                   electricBad && waterBad
                     ? 'Số điện/nước nhỏ hơn đầu kỳ — bấm «Thay ĐH điện» hoặc «Thay ĐH nước» nếu vừa thay.'
                     : electricBad
-                      ? 'Số điện nhỏ hơn đầu kỳ — bấm «Thay ĐH điện» nếu vừa thay đồng hồ.'
-                      : 'Số nước nhỏ hơn đầu kỳ — bấm «Thay ĐH nước» nếu vừa thay đồng hồ.'
+                      ? hasElectricReset
+                        ? 'Số điện nhỏ hơn đầu đồng hồ mới — nhập chỉ số đồng hồ mới hiện tại.'
+                        : 'Số điện nhỏ hơn đầu kỳ — bấm «Thay ĐH điện» nếu vừa thay đồng hồ.'
+                      : hasWaterReset
+                        ? 'Số nước nhỏ hơn đầu đồng hồ mới — nhập chỉ số đồng hồ mới hiện tại.'
+                        : 'Số nước nhỏ hơn đầu kỳ — bấm «Thay ĐH nước» nếu vừa thay đồng hồ.'
 
                 return (
                   <div key={room.id}>
@@ -416,10 +443,11 @@ export function MeterPage() {
                       </div>
                     )}
 
-                    {draft.changing === 'electric' && (
+                    {draft.changing === 'electric' && base && (
                       <MeterResetPanel
                         kind="electric"
                         draft={draft}
+                        baseline={base.electric}
                         onPatch={(patch) => patchDraft(room.id, patch)}
                         onCancel={() =>
                           patchDraft(room.id, {
@@ -428,17 +456,35 @@ export function MeterPage() {
                             changing: null,
                           })
                         }
-                        onApply={() => {
-                          patchDraft(room.id, { changing: null })
-                          void commit(room, { ...draft, changing: null })
+                        onApply={({ oldReading, newStart }) => {
+                          const nextElectric =
+                            draft.electric !== null && draft.electric >= oldReading
+                              ? newStart
+                              : (draft.electric ?? newStart)
+                          const next: Draft = {
+                            ...draft,
+                            electricReset: oldReading,
+                            electricNewStart: newStart,
+                            electric: nextElectric,
+                            changing: null,
+                          }
+                          patchDraft(room.id, next)
+                          void commit(room, next, { quiet: true }).then(() => {
+                            toast(
+                              nextElectric === newStart
+                                ? 'Đã ghi thay ĐH điện. Nhập số đồng hồ điện MỚI hiện tại.'
+                                : 'Đã ghi thay ĐH điện',
+                            )
+                          })
                         }}
                       />
                     )}
 
-                    {draft.changing === 'water' && (
+                    {draft.changing === 'water' && base && (
                       <MeterResetPanel
                         kind="water"
                         draft={draft}
+                        baseline={base.water}
                         onPatch={(patch) => patchDraft(room.id, patch)}
                         onCancel={() =>
                           patchDraft(room.id, {
@@ -447,9 +493,26 @@ export function MeterPage() {
                             changing: null,
                           })
                         }
-                        onApply={() => {
-                          patchDraft(room.id, { changing: null })
-                          void commit(room, { ...draft, changing: null })
+                        onApply={({ oldReading, newStart }) => {
+                          const nextWater =
+                            draft.water !== null && draft.water >= oldReading
+                              ? newStart
+                              : (draft.water ?? newStart)
+                          const next: Draft = {
+                            ...draft,
+                            waterReset: oldReading,
+                            waterNewStart: newStart,
+                            water: nextWater,
+                            changing: null,
+                          }
+                          patchDraft(room.id, next)
+                          void commit(room, next, { quiet: true }).then(() => {
+                            toast(
+                              nextWater === newStart
+                                ? 'Đã ghi thay ĐH nước. Nhập số đồng hồ nước MỚI hiện tại.'
+                                : 'Đã ghi thay ĐH nước',
+                            )
+                          })
                         }}
                       />
                     )}
@@ -461,18 +524,48 @@ export function MeterPage() {
                       >
                         {collectsElectric && (
                           <button
+                            type="button"
                             className="btn ghost sm"
                             style={{ padding: '2px 8px', minHeight: 0 }}
-                            onClick={() => patchDraft(room.id, { changing: 'electric' })}
+                            onClick={() => {
+                              const guessed =
+                                draft.electricReset ??
+                                (draft.electric !== null &&
+                                base &&
+                                draft.electric >= base.electric
+                                  ? draft.electric
+                                  : null) ??
+                                base?.electric ??
+                                0
+                              patchDraft(room.id, {
+                                changing: 'electric',
+                                electricReset: guessed,
+                                electricNewStart: draft.electricNewStart ?? 0,
+                              })
+                            }}
                           >
                             Thay ĐH điện
                           </button>
                         )}
                         {collectsWater && (
                           <button
+                            type="button"
                             className="btn ghost sm"
                             style={{ padding: '2px 8px', minHeight: 0 }}
-                            onClick={() => patchDraft(room.id, { changing: 'water' })}
+                            onClick={() => {
+                              const guessed =
+                                draft.waterReset ??
+                                (draft.water !== null && base && draft.water >= base.water
+                                  ? draft.water
+                                  : null) ??
+                                base?.water ??
+                                0
+                              patchDraft(room.id, {
+                                changing: 'water',
+                                waterReset: guessed,
+                                waterNewStart: draft.waterNewStart ?? 0,
+                              })
+                            }}
                           >
                             Thay ĐH nước
                           </button>
