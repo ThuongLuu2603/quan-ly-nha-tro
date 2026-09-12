@@ -173,6 +173,30 @@ describe('quyet toan theo thang / ky thu', () => {
     expect(entries[0]?.label).toBe('Chi khác')
   })
 
+  it('khoan thu ghi tay thanh dong Vao (otherIn)', () => {
+    const expenses: Expense[] = [
+      {
+        id: 'inc1',
+        date: '2026-09-12',
+        kind: 'income',
+        amount: 2_000_000,
+        note: 'Cọc phòng 02',
+        createdAt: '2026-09-12T00:00:00.000Z',
+      },
+    ]
+    const entries = buildAllLedgerEntries([], expenses, () => 'P01').filter(
+      (e) => e.settlementPeriod === '2026-09',
+    )
+    expect(entries).toHaveLength(1)
+    expect(entries[0]?.direction).toBe('in')
+    expect(entries[0]?.label).toBe('Thu khác')
+    const summary = summarizeLedger(entries)
+    expect(summary.otherIn).toBe(2_000_000)
+    expect(summary.totalIn).toBe(2_000_000)
+    expect(summary.totalOut).toBe(0)
+    expect(summary.balance).toBe(2_000_000)
+  })
+
   it('so du dau ky lay tu cac ky thu truoc', () => {
     const invoices = [
       invoice({

@@ -282,9 +282,12 @@ function CashflowTab({ year }: { year: number }) {
   const openingLabel =
     scope === 'year' ? `Số dư đầu năm ${year}` : `Số dư đầu ${dt.formatPeriodShort(month)}`
 
+  const needsNote = kind === 'other' || kind === 'income'
+  const isIncome = kind === 'income'
+
   const saveExpense = async () => {
     if (amount <= 0 || saving) return
-    if (kind === 'other' && !note.trim()) return
+    if (needsNote && !note.trim()) return
     setSaving(true)
     try {
       await addExpense({
@@ -296,16 +299,18 @@ function CashflowTab({ year }: { year: number }) {
       setAmount(0)
       setNote('')
       toast(
-        kind === 'electric'
-          ? 'Đã ghi chi tiền điện'
-          : kind === 'water'
-            ? 'Đã ghi chi tiền nước'
-            : 'Đã ghi chi khác',
+        kind === 'income'
+          ? 'Đã ghi khoản thu'
+          : kind === 'electric'
+            ? 'Đã ghi chi tiền điện'
+            : kind === 'water'
+              ? 'Đã ghi chi tiền nước'
+              : 'Đã ghi chi khác',
       )
     } catch (error) {
       toast(
         error instanceof OfflineReadOnlyError
-          ? 'Cần mạng / đăng nhập để ghi chi'
+          ? 'Cần mạng / đăng nhập để ghi sổ'
           : error instanceof Error
             ? error.message
             : 'Không ghi được',
@@ -316,10 +321,10 @@ function CashflowTab({ year }: { year: number }) {
   }
 
   const remove = async (expenseId: string) => {
-    if (!window.confirm('Xóa khoản chi này?')) return
+    if (!window.confirm('Xóa khoản này khỏi sổ?')) return
     try {
       await deleteExpense(expenseId)
-      toast('Đã xóa khoản chi')
+      toast('Đã xóa')
     } catch (error) {
       toast(
         error instanceof OfflineReadOnlyError
@@ -425,6 +430,12 @@ function CashflowTab({ year }: { year: number }) {
             </span>
           </div>
           <div className="row between small">
+            <span className="muted">Thu khác</span>
+            <span className="num" style={{ color: 'var(--ok)' }}>
+              {formatMoney(summary.otherIn)} đ
+            </span>
+          </div>
+          <div className="row between small">
             <span className="muted">Chi tiền điện</span>
             <span className="num" style={{ color: 'var(--danger)' }}>
               {formatMoney(summary.electricOut)} đ
@@ -452,13 +463,20 @@ function CashflowTab({ year }: { year: number }) {
         </div>
       </Card>
 
-      <Card title="Ghi khoản chi">
+      <Card title="Ghi thu / chi">
         <Banner tone="info">
-          Mỗi lần thu tiền mặt tự thành <strong>1 dòng Vào + 1 dòng Ra</strong>. Thu chuyển khoản chỉ{' '}
-          <strong>1 dòng Vào</strong>. Chi điện / nước / khác nhập ở đây thành dòng Ra.
+          Mỗi lần thu tiền mặt từ phiếu tự thành <strong>1 dòng Vào + 1 dòng Ra</strong>. Thu chuyển
+          khoản chỉ <strong>1 dòng Vào</strong>. Khoản thu / chi ghi tay ở đây.
         </Banner>
         <div className="stack" style={{ marginTop: 12 }}>
           <div className="chip-row">
+            <button
+              type="button"
+              className={kind === 'income' ? 'chip active' : 'chip'}
+              onClick={() => setKind('income')}
+            >
+              Khoản thu
+            </button>
             <button
               type="button"
               className={kind === 'electric' ? 'chip active' : 'chip'}
@@ -482,7 +500,7 @@ function CashflowTab({ year }: { year: number }) {
             </button>
           </div>
           <div className="grid-2">
-            <Field label="Ngày chi">
+            <Field label={isIncome ? 'Ngày thu' : 'Ngày chi'}>
               <DateInput value={date} onChange={(v) => setDate(v as ISODate)} />
             </Field>
             <Field label="Số tiền">
@@ -491,26 +509,34 @@ function CashflowTab({ year }: { year: number }) {
           </div>
           <Field
             label="Ghi chú"
-            hint={kind === 'other' ? 'Nên ghi rõ nội dung chi' : 'Tuỳ chọn — hoá đơn EVN, kỳ tháng...'}
+            hint={
+              needsNote
+                ? isIncome
+                  ? 'Bắt buộc — ghi rõ nguồn thu'
+                  : 'Bắt buộc — ghi rõ nội dung chi'
+                : 'Tuỳ chọn — hoá đơn EVN, kỳ tháng...'
+            }
           >
             <TextInput
               value={note}
               onChange={setNote}
               placeholder={
-                kind === 'electric'
-                  ? 'VD: Điện T08/2026'
-                  : kind === 'water'
-                    ? 'VD: Nước T08/2026'
-                    : 'VD: Sửa ống nước, mua khóa...'
+                kind === 'income'
+                  ? 'VD: Cọc phòng, bán đồ cũ...'
+                  : kind === 'electric'
+                    ? 'VD: Điện T08/2026'
+                    : kind === 'water'
+                      ? 'VD: Nước T08/2026'
+                      : 'VD: Sửa ống nước, mua khóa...'
               }
             />
           </Field>
           <button
             className="btn primary block"
-            disabled={amount <= 0 || saving || (kind === 'other' && !note.trim())}
+            disabled={amount <= 0 || saving || (needsNote && !note.trim())}
             onClick={() => void saveExpense()}
           >
-            {saving ? 'Đang lưu...' : 'Ghi khoản chi'}
+            {saving ? 'Đang lưu...' : isIncome ? 'Ghi khoản thu' : 'Ghi khoản chi'}
           </button>
         </div>
       </Card>
@@ -518,8 +544,7 @@ function CashflowTab({ year }: { year: number }) {
       <Card title={`Sao kê · ${rangeLabel}`}>
         {rows.length === 0 && ledger.opening === 0 ? (
           <div className="muted small">
-            Chưa có dòng nào trong giai đoạn này. Thu tiền trên phiếu sẽ hiện ở đây; chi điện/nước ghi
-            ở form trên.
+            Chưa có dòng nào trong khoảng này. Thu trên phiếu và khoản thu/chi ghi tay sẽ hiện ở đây.
           </div>
         ) : (
           <div className="ledger">

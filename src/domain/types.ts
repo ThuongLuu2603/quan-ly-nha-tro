@@ -151,8 +151,8 @@ export interface Settings {
 
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
 
-/** Chi phí chủ trọ trả — dùng cho sổ thu chi. */
-export type ExpenseKind = 'electric' | 'water' | 'other'
+/** Khoản ghi tay trên sổ thu chi: chi điện/nước/khác hoặc thu khác. */
+export type ExpenseKind = 'electric' | 'water' | 'other' | 'income'
 
 export interface Expense {
   id: ID

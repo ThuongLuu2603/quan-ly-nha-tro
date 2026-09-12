@@ -39,6 +39,8 @@ export interface LedgerSummary {
   /** Rút tiền mặt khỏi quỹ (cặp 1-1 với thu tiền mặt). */
   cashOut: number
   transferIn: number
+  /** Thu khác (ghi tay). */
+  otherIn: number
   electricOut: number
   waterOut: number
   otherOut: number
@@ -107,6 +109,8 @@ export function expenseKindLabel(kind: ExpenseKind): string {
       return 'Chi tiền nước'
     case 'other':
       return 'Chi khác'
+    case 'income':
+      return 'Thu khác'
     default: {
       const _exhaustive: never = kind
       return _exhaustive
@@ -184,11 +188,12 @@ export function buildAllLedgerEntries(
   }
 
   for (const expense of expenses) {
+    const isIncome = expense.kind === 'income'
     entries.push({
       id: `exp:${expense.id}`,
       date: expense.date,
       settlementPeriod: settlementPeriodOfExpense(expense),
-      direction: 'out',
+      direction: isIncome ? 'in' : 'out',
       amount: Math.abs(expense.amount),
       label: expenseKindLabel(expense.kind),
       detail: expense.note,
@@ -219,6 +224,7 @@ export function summarizeLedger(entries: LedgerEntry[]): LedgerSummary {
   let cashIn = 0
   let cashOut = 0
   let transferIn = 0
+  let otherIn = 0
   let electricOut = 0
   let waterOut = 0
   let otherOut = 0
@@ -228,11 +234,12 @@ export function summarizeLedger(entries: LedgerEntry[]): LedgerSummary {
   for (const entry of entries) {
     if (entry.direction === 'in') {
       totalIn += entry.amount
-      if (entry.label.includes('Tiền mặt')) {
+      if (entry.expenseKind === 'income') {
+        otherIn += entry.amount
+      } else if (entry.label.includes('Tiền mặt')) {
         cashIn += entry.amount
         if (entry.roomId) cashRooms.add(entry.roomId)
-      }
-      if (entry.label.includes('Chuyển khoản')) {
+      } else if (entry.label.includes('Chuyển khoản')) {
         transferIn += entry.amount
         if (entry.roomId) transferRooms.add(entry.roomId)
       }
@@ -252,6 +259,8 @@ export function summarizeLedger(entries: LedgerEntry[]): LedgerSummary {
         case 'other':
           otherOut += entry.amount
           break
+        case 'income':
+          break
         case undefined:
           break
         default: {
@@ -270,6 +279,7 @@ export function summarizeLedger(entries: LedgerEntry[]): LedgerSummary {
     cashIn,
     cashOut,
     transferIn,
+    otherIn,
     electricOut,
     waterOut,
     otherOut,
