@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import type { Invoice, Reading, Room, Settings, Tenancy, Tenant } from '../domain/types'
+import type { Expense, Invoice, Reading, Room, Settings, Tenancy, Tenant } from '../domain/types'
 import type { SyncOutboxRow } from '../sync/types'
 
 export class TroDatabase extends Dexie {
@@ -8,6 +8,7 @@ export class TroDatabase extends Dexie {
   tenants!: Table<Tenant, string>
   readings!: Table<Reading, string>
   invoices!: Table<Invoice, string>
+  expenses!: Table<Expense, string>
   settings!: Table<Settings, string>
   syncOutbox!: Table<SyncOutboxRow, string>
   syncMeta!: Table<{ key: string; value: string }, string>
@@ -25,6 +26,9 @@ export class TroDatabase extends Dexie {
     this.version(2).stores({
       syncOutbox: 'entityKey, entityType, updatedAt',
       syncMeta: 'key',
+    })
+    this.version(3).stores({
+      expenses: 'id, date, kind',
     })
   }
 }

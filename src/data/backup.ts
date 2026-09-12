@@ -1,4 +1,4 @@
-import type { Invoice, Reading, Room, Settings, Tenancy, Tenant } from '../domain/types'
+import type { Expense, Invoice, Reading, Room, Settings, Tenancy, Tenant } from '../domain/types'
 import { clearRemoteData, pushAllLocal } from '../sync/engine'
 import { withApplyingRemote } from '../sync/guard'
 import { db } from './db'
@@ -12,16 +12,18 @@ export interface BackupFile {
   tenants: Tenant[]
   readings: Reading[]
   invoices: Invoice[]
+  expenses?: Expense[]
   settings: Settings | null
 }
 
 export async function exportBackup(): Promise<BackupFile> {
-  const [rooms, tenancies, tenants, readings, invoices, settings] = await Promise.all([
+  const [rooms, tenancies, tenants, readings, invoices, expenses, settings] = await Promise.all([
     db.rooms.toArray(),
     db.tenancies.toArray(),
     db.tenants.toArray(),
     db.readings.toArray(),
     db.invoices.toArray(),
+    db.expenses.toArray(),
     db.settings.get('app'),
   ])
   return {
@@ -33,6 +35,7 @@ export async function exportBackup(): Promise<BackupFile> {
     tenants,
     readings,
     invoices,
+    expenses,
     settings: settings ?? null,
   }
 }
@@ -47,7 +50,7 @@ export async function importBackup(file: BackupFile): Promise<void> {
   await withApplyingRemote(async () => {
     await db.transaction(
       'rw',
-      [db.rooms, db.tenancies, db.tenants, db.readings, db.invoices, db.settings],
+      [db.rooms, db.tenancies, db.tenants, db.readings, db.invoices, db.expenses, db.settings],
       async () => {
         await Promise.all([
           db.rooms.clear(),
@@ -55,12 +58,14 @@ export async function importBackup(file: BackupFile): Promise<void> {
           db.tenants.clear(),
           db.readings.clear(),
           db.invoices.clear(),
+          db.expenses.clear(),
         ])
         await db.rooms.bulkPut(file.rooms)
         await db.tenancies.bulkPut(file.tenancies)
         await db.tenants.bulkPut(file.tenants)
         await db.readings.bulkPut(file.readings)
         await db.invoices.bulkPut(file.invoices)
+        if (file.expenses?.length) await db.expenses.bulkPut(file.expenses)
         if (file.settings) await db.settings.put({ ...file.settings, id: 'app' })
       },
     )
@@ -71,15 +76,20 @@ export async function importBackup(file: BackupFile): Promise<void> {
 
 export async function wipeAll(): Promise<void> {
   await withApplyingRemote(async () => {
-    await db.transaction('rw', db.rooms, db.tenancies, db.tenants, db.readings, db.invoices, async () => {
-      await Promise.all([
-        db.rooms.clear(),
-        db.tenancies.clear(),
-        db.tenants.clear(),
-        db.readings.clear(),
-        db.invoices.clear(),
-      ])
-    })
+    await db.transaction(
+      'rw',
+      [db.rooms, db.tenancies, db.tenants, db.readings, db.invoices, db.expenses],
+      async () => {
+        await Promise.all([
+          db.rooms.clear(),
+          db.tenancies.clear(),
+          db.tenants.clear(),
+          db.readings.clear(),
+          db.invoices.clear(),
+          db.expenses.clear(),
+        ])
+      },
+    )
     await db.syncOutbox.clear()
   })
   try {

@@ -1,5 +1,5 @@
 import { db } from '../data/db'
-import type { Invoice, Reading, Room, Settings, Tenancy, Tenant } from '../domain/types'
+import type { Expense, Invoice, Reading, Room, Settings, Tenancy, Tenant } from '../domain/types'
 import { clearOutboxEntry } from './outbox'
 import { withApplyingRemote } from './guard'
 import type { RemoteSyncRecord, SyncEntityType } from './types'
@@ -30,6 +30,9 @@ export async function applyRemoteRecord(record: RemoteSyncRecord): Promise<void>
       case 'invoice':
         await db.invoices.put(record.payload as Invoice)
         break
+      case 'expense':
+        await db.expenses.put(record.payload as Expense)
+        break
       case 'settings':
         await db.settings.put({ ...(record.payload as Settings), id: 'app' })
         break
@@ -58,6 +61,9 @@ async function deleteLocal(entityType: SyncEntityType, entityId: string): Promis
       break
     case 'invoice':
       await db.invoices.delete(entityId)
+      break
+    case 'expense':
+      await db.expenses.delete(entityId)
       break
     case 'settings':
       break

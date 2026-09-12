@@ -8,6 +8,8 @@ import {
 } from '../domain/billing'
 import * as dt from '../domain/dates'
 import type {
+  Expense,
+  ExpenseKind,
   ID,
   ISODate,
   Invoice,
@@ -548,4 +550,32 @@ export function occupantNames(data: Dataset, tenancyId: ID | undefined): string 
   return tenantsOf(data, tenancyId)
     .map((t) => t.fullName)
     .join(', ')
+}
+
+export async function addExpense(input: {
+  date: ISODate
+  kind: ExpenseKind
+  amount: number
+  note?: string
+}): Promise<ID> {
+  assertCanMutate()
+  const amount = Math.round(input.amount)
+  if (amount <= 0) throw new Error('Số tiền chi phải lớn hơn 0')
+  const expense: Expense = {
+    id: newId(),
+    date: input.date,
+    kind: input.kind,
+    amount,
+    note: input.note?.trim() || undefined,
+    createdAt: new Date().toISOString(),
+  }
+  await db.expenses.put(expense)
+  await syncAfterMutation()
+  return expense.id
+}
+
+export async function deleteExpense(expenseId: ID): Promise<void> {
+  assertCanMutate()
+  await db.expenses.delete(expenseId)
+  await syncAfterMutation()
 }

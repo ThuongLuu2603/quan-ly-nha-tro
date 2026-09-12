@@ -231,12 +231,13 @@ async function fetchRemoteRecords(userId: string, since: string): Promise<Remote
 
 /** Day toan bo du lieu local len cloud (sau khi nhap backup hoac lan dau dang nhap). */
 export async function pushAllLocal(): Promise<void> {
-  const [rooms, tenancies, tenants, readings, invoices, settings] = await Promise.all([
+  const [rooms, tenancies, tenants, readings, invoices, expenses, settings] = await Promise.all([
     db.rooms.toArray(),
     db.tenancies.toArray(),
     db.tenants.toArray(),
     db.readings.toArray(),
     db.invoices.toArray(),
+    db.expenses.toArray(),
     db.settings.get('app'),
   ])
 
@@ -245,6 +246,7 @@ export async function pushAllLocal(): Promise<void> {
   for (const tenant of tenants) await queueSync('tenant', tenant.id, tenant, false)
   for (const reading of readings) await queueSync('reading', reading.id, reading, false)
   for (const invoice of invoices) await queueSync('invoice', invoice.id, invoice, false)
+  for (const expense of expenses) await queueSync('expense', expense.id, expense, false)
   if (settings) await queueSync('settings', 'app', settings, false)
 
   await runSync()
@@ -267,6 +269,7 @@ export function installSyncHooks(): void {
   hookTable(db.tenants, 'tenant')
   hookTable(db.readings, 'reading')
   hookTable(db.invoices, 'invoice')
+  hookTable(db.expenses, 'expense')
   hookTable(db.settings, 'settings')
 }
 

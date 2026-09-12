@@ -1,4 +1,11 @@
-export type SyncEntityType = 'room' | 'tenancy' | 'tenant' | 'reading' | 'invoice' | 'settings'
+export type SyncEntityType =
+  | 'room'
+  | 'tenancy'
+  | 'tenant'
+  | 'reading'
+  | 'invoice'
+  | 'expense'
+  | 'settings'
 
 export interface SyncOutboxRow {
   entityKey: string

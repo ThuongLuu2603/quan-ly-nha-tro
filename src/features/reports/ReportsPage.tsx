@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { addExpense, deleteExpense } from '../../data/actions'
 import { totalDepositHeld } from '../../data/selectors'
 import { useDataset } from '../../data/store'
 import {
@@ -10,13 +11,28 @@ import {
   revenueBreakdownTotal,
   type RevenueBreakdown,
 } from '../../domain/billing'
+import {
+  buildLedgerEntries,
+  collectByMethodInPeriod,
+  summarizeLedger,
+  withRunningBalance,
+} from '../../domain/cashflow'
 import * as dt from '../../domain/dates'
 import { buildRoomById, compareInvoicesByRoom } from '../../domain/roomOrder'
 import { formatMoney, formatNumber } from '../../domain/money'
 import { downloadBlob } from '../../receipt/share'
-import { Card, EmptyState } from '../../ui/components'
+import { OfflineReadOnlyError } from '../../sync/mutation'
+import type { ExpenseKind, Invoice, Period } from '../../domain/types'
+import {
+  Banner,
+  Card,
+  EmptyState,
+  Field,
+  MoneyInput,
+  TextInput,
+  useToast,
+} from '../../ui/components'
 import { Page } from '../../ui/Page'
-import type { Invoice, Period } from '../../domain/types'
 
 function BreakdownRows({ breakdown, compact }: { breakdown: RevenueBreakdown; compact?: boolean }) {
   const rows = [
@@ -72,9 +88,14 @@ interface MonthStat {
   kwh: number
   m3: number
   debt: number
+  cashAmount: number
+  transferAmount: number
+  cashRooms: number
+  transferRooms: number
 }
 
 type ChartMode = 'revenue' | 'utilities'
+type ReportTab = 'revenue' | 'ledger'
 
 const CHART_MODES: { key: ChartMode; label: string }[] = [
   { key: 'revenue', label: 'Doanh thu' },
@@ -123,91 +144,89 @@ function RevenueChart({
   mode: ChartMode
   showValues: boolean
 }) {
-  const valueOf = (m: MonthStat): number[] => {
-    switch (mode) {
-      case 'revenue':
-        return [m.billed, m.collected]
-      case 'utilities':
-        return [m.breakdown.rent, m.breakdown.electric, m.breakdown.water]
-      default:
-        return [0]
-    }
-  }
-
-  const maxValue = Math.max(...months.flatMap(valueOf), 1)
-  const current = dt.periodOf(dt.today())
-  const W = 720
-  const H = 200
-  const PAD_L = 4
-  const PAD_B = 26
-  const barArea = H - PAD_B
-  const slot = W / months.length
+  const width = 720
+  const height = 200
+  const padL = 44
+  const padR = 12
+  const padT = 18
+  const padB = 28
+  const plotW = width - padL - padR
+  const plotH = height - padT - padB
   const seriesCount = mode === 'revenue' ? 2 : 3
-  const barW = Math.min(mode === 'revenue' ? 16 : 15, (slot * 0.66) / seriesCount)
-  const groupGap = Math.min(8, slot * 0.14)
-  const compact = maxValue >= 1_000_000
+  const gap = 10
+  const groupW = plotW / Math.max(months.length, 1)
+  const barW = Math.min(18, (groupW - gap) / seriesCount)
 
-  const fmt = (v: number): string => {
-    if (v <= 0) return ''
-    if (compact) return `${Math.round(v / 100_000) / 10}tr`
-    return `${Math.round(v / 1000)}k`
-  }
+  const values = months.flatMap((m) =>
+    mode === 'revenue'
+      ? [m.billed, m.collected]
+      : [m.breakdown.rent, m.breakdown.electric, m.breakdown.water],
+  )
+  const max = Math.max(1, ...values)
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => Math.round(max * t))
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="revenue-chart" role="img" aria-label={`Biểu đồ năm ${year}`}>
-      {[0.25, 0.5, 0.75, 1].map((t) => (
-        <line
-          key={t}
-          x1={PAD_L}
-          x2={W - PAD_L}
-          y1={barArea * (1 - t) + 4}
-          y2={barArea * (1 - t) + 4}
-          stroke="var(--border)"
-          strokeDasharray="3 5"
-          strokeWidth="1"
-        />
-      ))}
-      {months.map((m, index) => {
-        const values = valueOf(m)
-        const groupW = barW * values.length + groupGap * (values.length - 1)
-        const x = PAD_L + index * slot + (slot - groupW) / 2
-        const bh = (v: number) => Math.max(0, (v / maxValue) * (barArea - 22))
-        const isActive = m.period === current
-        const hasData = m.count > 0
+    <svg className="revenue-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Biểu đồ năm ${year}`}>
+      {ticks.map((tick) => {
+        const y = padT + plotH - (tick / max) * plotH
+        return (
+          <g key={tick}>
+            <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="var(--line)" strokeWidth={1} />
+            <text x={padL - 6} y={y + 3} textAnchor="end" fontSize={9} fill="var(--muted)">
+              {tick >= 1_000_000 ? `${Math.round(tick / 1_000_000)}tr` : tick >= 1000 ? `${Math.round(tick / 1000)}k` : tick}
+            </text>
+          </g>
+        )
+      })}
+      {months.map((m, mi) => {
+        const groupX = padL + mi * groupW + gap / 2
+        const series =
+          mode === 'revenue'
+            ? [m.billed, m.collected]
+            : [m.breakdown.rent, m.breakdown.electric, m.breakdown.water]
         return (
           <g key={m.period}>
-            {values.map((v, vi) => {
-              const h = bh(v)
-              if (!hasData || v <= 0) return null
-              const bx = x + vi * (barW + groupGap)
-              const by = barArea - h + 4
+            {series.map((value, si) => {
+              const h = (value / max) * plotH
+              const x = groupX + si * barW
+              const y = padT + plotH - h
               return (
-                <g key={vi}>
-                  <rect x={bx} y={by} width={barW} height={h} rx={3} fill={barColor(vi)} />
-                  {showValues && (
+                <g key={si}>
+                  <rect
+                    x={x}
+                    y={y}
+                    width={Math.max(barW - 2, 2)}
+                    height={Math.max(h, 0)}
+                    rx={3}
+                    fill={barColor(si)}
+                    opacity={mode === 'revenue' && si === 0 ? 0.35 : 1}
+                  />
+                  {showValues && value > 0 && (
                     <text
-                      x={bx + barW / 2}
-                      y={by - 4}
+                      x={x + (barW - 2) / 2}
+                      y={y - 3}
                       textAnchor="middle"
-                      fontSize="9.5"
-                      fontWeight={600}
+                      fontSize={8}
                       fill="var(--muted)"
                     >
-                      {fmt(v)}
+                      {value >= 1_000_000
+                        ? `${(value / 1_000_000).toFixed(1)}tr`
+                        : value >= 1000
+                          ? `${Math.round(value / 1000)}k`
+                          : value}
                     </text>
                   )}
                 </g>
               )
             })}
             <text
-              x={x + groupW / 2}
-              y={H - 8}
+              x={groupX + (seriesCount * barW) / 2}
+              y={height - 8}
               textAnchor="middle"
-              fontSize="10.5"
-              fontWeight={isActive ? 700 : 500}
-              fill={isActive ? 'var(--accent)' : 'var(--muted)'}
+              fontSize={10}
+              fill="var(--muted)"
             >
-              {Number(m.period.slice(5, 7))}
+              {m.period.slice(5)}
             </text>
           </g>
         )
@@ -216,8 +235,232 @@ function RevenueChart({
   )
 }
 
+function CashflowTab({ year }: { year: number }) {
+  const data = useDataset()
+  const { toast, toastNode } = useToast()
+  const [kind, setKind] = useState<ExpenseKind>('electric')
+  const [amount, setAmount] = useState(0)
+  const [date, setDate] = useState(dt.today())
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const roomById = useMemo(() => new Map(data.rooms.map((r) => [r.id, r.name])), [data.rooms])
+
+  const entries = useMemo(
+    () =>
+      buildLedgerEntries(
+        data.invoices,
+        data.expenses,
+        (roomId) => roomById.get(roomId) ?? 'Phòng',
+        year,
+      ),
+    [data.invoices, data.expenses, roomById, year],
+  )
+  const rows = useMemo(() => withRunningBalance(entries), [entries])
+  const summary = useMemo(() => summarizeLedger(entries), [entries])
+
+  const saveExpense = async () => {
+    if (amount <= 0 || saving) return
+    setSaving(true)
+    try {
+      await addExpense({
+        date,
+        kind,
+        amount,
+        note: note.trim() || undefined,
+      })
+      setAmount(0)
+      setNote('')
+      toast(kind === 'electric' ? 'Đã ghi chi tiền điện' : 'Đã ghi chi tiền nước')
+    } catch (error) {
+      toast(
+        error instanceof OfflineReadOnlyError
+          ? 'Cần mạng / đăng nhập để ghi chi'
+          : error instanceof Error
+            ? error.message
+            : 'Không ghi được',
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (expenseId: string) => {
+    if (!window.confirm('Xóa khoản chi này?')) return
+    try {
+      await deleteExpense(expenseId)
+      toast('Đã xóa khoản chi')
+    } catch (error) {
+      toast(
+        error instanceof OfflineReadOnlyError
+          ? 'Cần mạng / đăng nhập để xóa'
+          : 'Không xóa được',
+      )
+    }
+  }
+
+  return (
+    <>
+      <div className="stat-grid" style={{ marginBottom: 14 }}>
+        <div className="stat">
+          <div className="label">Tổng thu {year}</div>
+          <div className="value" style={{ color: 'var(--ok)' }}>
+            {formatMoney(summary.totalIn)}
+          </div>
+        </div>
+        <div className="stat">
+          <div className="label">Tổng chi</div>
+          <div className="value" style={{ color: 'var(--danger)' }}>
+            {formatMoney(summary.totalOut)}
+          </div>
+        </div>
+        <div className="stat">
+          <div className="label">Còn lại</div>
+          <div
+            className="value"
+            style={{ color: summary.balance >= 0 ? 'var(--accent)' : 'var(--danger)' }}
+          >
+            {formatMoney(summary.balance)}
+          </div>
+        </div>
+      </div>
+
+      <Card title="Tóm tắt quỹ">
+        <div className="stack tight">
+          <div className="row between small">
+            <span className="muted">Thu tiền mặt</span>
+            <span className="num">{formatMoney(summary.cashIn)} đ</span>
+          </div>
+          <div className="row between small">
+            <span className="muted">Thu chuyển khoản</span>
+            <span className="num">{formatMoney(summary.transferIn)} đ</span>
+          </div>
+          <div className="row between small">
+            <span className="muted">Chi tiền điện</span>
+            <span className="num" style={{ color: 'var(--danger)' }}>
+              {formatMoney(summary.electricOut)} đ
+            </span>
+          </div>
+          <div className="row between small">
+            <span className="muted">Chi tiền nước</span>
+            <span className="num" style={{ color: 'var(--danger)' }}>
+              {formatMoney(summary.waterOut)} đ
+            </span>
+          </div>
+          <div
+            className="row between"
+            style={{ marginTop: 4, paddingTop: 8, borderTop: '1px solid var(--line)' }}
+          >
+            <span className="small strong">Số dư hiện tại</span>
+            <span className="num strong">{formatMoney(summary.balance)} đ</span>
+          </div>
+        </div>
+      </Card>
+
+      <Card title="Ghi chi điện / nước">
+        <Banner tone="info">
+          Mỗi lần thu tiền mặt hoặc chuyển khoản tự thành <strong>1 dòng Vào</strong>. Chi điện/nước
+          bạn nhập ở đây thành <strong>1 dòng Ra</strong>.
+        </Banner>
+        <div className="stack" style={{ marginTop: 12 }}>
+          <div className="chip-row">
+            <button
+              type="button"
+              className={kind === 'electric' ? 'chip active' : 'chip'}
+              onClick={() => setKind('electric')}
+            >
+              Chi tiền điện
+            </button>
+            <button
+              type="button"
+              className={kind === 'water' ? 'chip active' : 'chip'}
+              onClick={() => setKind('water')}
+            >
+              Chi tiền nước
+            </button>
+          </div>
+          <div className="grid-2">
+            <Field label="Ngày chi">
+              <input
+                className="input"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value as typeof date)}
+              />
+            </Field>
+            <Field label="Số tiền">
+              <MoneyInput value={amount} onChange={setAmount} />
+            </Field>
+          </div>
+          <Field label="Ghi chú" hint="Tuỳ chọn — hoá đơn EVN, kỳ tháng...">
+            <TextInput
+              value={note}
+              onChange={setNote}
+              placeholder={kind === 'electric' ? 'VD: Điện T08/2026' : 'VD: Nước T08/2026'}
+            />
+          </Field>
+          <button
+            className="btn primary block"
+            disabled={amount <= 0 || saving}
+            onClick={() => void saveExpense()}
+          >
+            {saving ? 'Đang lưu...' : 'Ghi khoản chi'}
+          </button>
+        </div>
+      </Card>
+
+      <Card title={`Sao kê ${year}`}>
+        {rows.length === 0 ? (
+          <div className="muted small">
+            Chưa có dòng nào. Thu tiền trên phiếu sẽ hiện ở đây; chi điện/nước ghi ở form trên.
+          </div>
+        ) : (
+          <div className="ledger">
+            <div className="ledger-head">
+              <span>Ngày</span>
+              <span>Nội dung</span>
+              <span className="right">Vào</span>
+              <span className="right">Ra</span>
+              <span className="right">Số dư</span>
+            </div>
+            {rows.map((row) => (
+              <div className="ledger-row" key={row.id}>
+                <span className="tiny muted">{dt.formatDate(row.date)}</span>
+                <span>
+                  <div className="small strong">{row.label}</div>
+                  {row.detail && <div className="tiny muted">{row.detail}</div>}
+                  {row.source === 'expense' && row.expenseId && (
+                    <button
+                      type="button"
+                      className="btn ghost sm"
+                      style={{ marginTop: 4, padding: '0 6px', minHeight: 0 }}
+                      onClick={() => void remove(row.expenseId!)}
+                    >
+                      Xóa
+                    </button>
+                  )}
+                </span>
+                <span className="num tiny right" style={{ color: 'var(--ok)' }}>
+                  {row.direction === 'in' ? formatMoney(row.amount) : ''}
+                </span>
+                <span className="num tiny right" style={{ color: 'var(--danger)' }}>
+                  {row.direction === 'out' ? formatMoney(row.amount) : ''}
+                </span>
+                <span className="num tiny right strong">{formatMoney(row.balance)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {toastNode}
+    </>
+  )
+}
+
 export function ReportsPage() {
   const data = useDataset()
+  const [tab, setTab] = useState<ReportTab>('revenue')
   const [year, setYear] = useState(() => Number(dt.today().slice(0, 4)))
   const [openMonth, setOpenMonth] = useState<Period | null>(null)
   const [chartMode, setChartMode] = useState<ChartMode>('revenue')
@@ -240,6 +483,7 @@ export function ReportsPage() {
         const remaining = outstandingOf(i)
         return remaining > 0 ? acc + remaining : acc
       }, 0)
+      const methods = collectByMethodInPeriod(data.invoices, period)
       return {
         period,
         invoices,
@@ -250,6 +494,10 @@ export function ReportsPage() {
         kwh: usageKwhOf(invoices),
         m3: usageM3Of(invoices),
         debt,
+        cashAmount: methods.cashAmount,
+        transferAmount: methods.transferAmount,
+        cashRooms: methods.cashRooms,
+        transferRooms: methods.transferRooms,
       }
     })
   }, [data.invoices, year])
@@ -261,7 +509,18 @@ export function ReportsPage() {
     { billed: 0, collected: 0 },
   )
 
-  const collectionRate = yearTotal.billed > 0 ? Math.round((yearTotal.collected / yearTotal.billed) * 100) : 0
+  const yearMethods = useMemo(() => {
+    return months.reduce(
+      (acc, m) => ({
+        cashAmount: acc.cashAmount + m.cashAmount,
+        transferAmount: acc.transferAmount + m.transferAmount,
+      }),
+      { cashAmount: 0, transferAmount: 0 },
+    )
+  }, [months])
+
+  const collectionRate =
+    yearTotal.billed > 0 ? Math.round((yearTotal.collected / yearTotal.billed) * 100) : 0
 
   const kwhYear = months.reduce((acc, m) => acc + m.kwh, 0)
   const m3Year = months.reduce((acc, m) => acc + m.m3, 0)
@@ -273,7 +532,9 @@ export function ReportsPage() {
   }, [months])
 
   const occupancy = useMemo(() => {
-    const occupied = data.rooms.filter((room) => data.tenancies.some((t) => t.roomId === room.id && t.status === 'active'))
+    const occupied = data.rooms.filter((room) =>
+      data.tenancies.some((t) => t.roomId === room.id && t.status === 'active'),
+    )
     const rate = data.rooms.length > 0 ? Math.round((occupied.length / data.rooms.length) * 100) : 0
     return { occupied, rate }
   }, [data.rooms, data.tenancies])
@@ -286,8 +547,15 @@ export function ReportsPage() {
   const years = useMemo(() => {
     const set = new Set<number>([Number(dt.today().slice(0, 4))])
     for (const invoice of data.invoices) set.add(Number(invoice.issueDate.slice(0, 4)))
+    for (const expense of data.expenses) set.add(Number(expense.date.slice(0, 4)))
+    for (const invoice of data.invoices) {
+      for (const payment of invoice.payments) {
+        if (payment.method === 'carried') continue
+        set.add(Number(payment.date.slice(0, 4)))
+      }
+    }
     return [...set].sort((a, b) => b - a)
-  }, [data.invoices])
+  }, [data.invoices, data.expenses])
 
   const exportCsv = () => {
     const header = ['Ma phieu', 'Phong', 'Ngay lap', 'Loai', 'Tong', 'Da thu', 'Con lai']
@@ -304,16 +572,35 @@ export function ReportsPage() {
     downloadBlob(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }), `phieu-nha-tro-${year}.csv`)
   }
 
-  if (data.invoices.length === 0) {
+  const empty = data.invoices.length === 0 && data.expenses.length === 0
+
+  if (empty) {
     return (
       <Page title="Báo cáo" back="/">
-        <EmptyState icon="report" text="Chưa có phiếu nào để thống kê." />
+        <EmptyState icon="report" text="Chưa có phiếu / thu chi nào để thống kê." />
       </Page>
     )
   }
 
   return (
     <Page title="Báo cáo" back="/">
+      <div className="chip-row">
+        <button
+          type="button"
+          className={tab === 'revenue' ? 'chip active' : 'chip'}
+          onClick={() => setTab('revenue')}
+        >
+          Doanh thu
+        </button>
+        <button
+          type="button"
+          className={tab === 'ledger' ? 'chip active' : 'chip'}
+          onClick={() => setTab('ledger')}
+        >
+          Sao kê quỹ
+        </button>
+      </div>
+
       <div className="chip-row">
         {years.map((y) => (
           <button key={y} className={y === year ? 'chip active' : 'chip'} onClick={() => setYear(y)}>
@@ -322,171 +609,246 @@ export function ReportsPage() {
         ))}
       </div>
 
-      <div className="stat-grid" style={{ marginBottom: 14 }}>
-        <div className="stat">
-          <div className="label">Ra phiếu {year}</div>
-          <div className="value">{formatMoney(yearTotal.billed)}</div>
-        </div>
-        <div className="stat">
-          <div className="label">Đã thu</div>
-          <div className="value" style={{ color: 'var(--ok)' }}>
-            {formatMoney(yearTotal.collected)}
+      {tab === 'ledger' ? (
+        <CashflowTab year={year} />
+      ) : (
+        <>
+          <div className="stat-grid" style={{ marginBottom: 14 }}>
+            <div className="stat">
+              <div className="label">Ra phiếu {year}</div>
+              <div className="value">{formatMoney(yearTotal.billed)}</div>
+            </div>
+            <div className="stat">
+              <div className="label">Đã thu</div>
+              <div className="value" style={{ color: 'var(--ok)' }}>
+                {formatMoney(yearTotal.collected)}
+              </div>
+            </div>
+            <div className="stat">
+              <div className="label">Tỷ lệ thu</div>
+              <div
+                className="value"
+                style={{
+                  color:
+                    collectionRate >= 95
+                      ? 'var(--ok)'
+                      : collectionRate >= 80
+                        ? 'var(--warn)'
+                        : 'var(--danger)',
+                }}
+              >
+                {collectionRate}%
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="stat">
-          <div className="label">Tỷ lệ thu</div>
-          <div className="value" style={{ color: collectionRate >= 95 ? 'var(--ok)' : collectionRate >= 80 ? 'var(--warn)' : 'var(--danger)' }}>
-            {collectionRate}%
-          </div>
-        </div>
-      </div>
 
-      <Card title={`Biểu đồ ${year}`}>
-        <div className="chip-row" style={{ marginBottom: 8 }}>
-          {CHART_MODES.map((item) => (
-            <button
-              key={item.key}
-              className={chartMode === item.key ? 'chip active' : 'chip'}
-              onClick={() => setChartMode(item.key)}
-            >
-              {item.label}
-            </button>
-          ))}
-          <button
-            className={showValues ? 'chip active' : 'chip'}
-            onClick={() => setShowValues((v) => !v)}
-            title="Hiện/ẩn số trên cột"
-          >
-            123
-          </button>
-        </div>
-        <div className="chart-legend tiny muted">
-          {chartMode === 'revenue' ? (
-            <>
-              <span><i className="dot" style={{ background: 'var(--accent)', opacity: 0.35 }} /> Ra phiếu</span>
-              <span><i className="dot" style={{ background: 'var(--accent)' }} /> Đã thu</span>
-            </>
-          ) : (
-            <>
-              <span><i className="dot" style={{ background: CHART_COLORS[0] }} /> Tiền trọ</span>
-              <span><i className="dot" style={{ background: CHART_COLORS[1] }} /> Tiền điện</span>
-              <span><i className="dot" style={{ background: CHART_COLORS[2] }} /> Tiền nước</span>
-            </>
-          )}
-        </div>
-        <RevenueChart months={months} year={year} mode={chartMode} showValues={showValues} />
-      </Card>
+          <Card title={`Hình thức thu ${year}`}>
+            <div className="stack tight">
+              <div className="row between small">
+                <span className="muted">Tiền mặt</span>
+                <span className="num strong">{formatMoney(yearMethods.cashAmount)} đ</span>
+              </div>
+              <div className="row between small">
+                <span className="muted">Chuyển khoản</span>
+                <span className="num strong">{formatMoney(yearMethods.transferAmount)} đ</span>
+              </div>
+            </div>
+          </Card>
 
-      <Card title={`Tổng kết năm ${year}`}>
-        <BreakdownRows breakdown={yearBreakdown} />
-      </Card>
+          <Card title={`Biểu đồ ${year}`}>
+            <div className="chip-row" style={{ marginBottom: 8 }}>
+              {CHART_MODES.map((item) => (
+                <button
+                  key={item.key}
+                  className={chartMode === item.key ? 'chip active' : 'chip'}
+                  onClick={() => setChartMode(item.key)}
+                >
+                  {item.label}
+                </button>
+              ))}
+              <button
+                className={showValues ? 'chip active' : 'chip'}
+                onClick={() => setShowValues((v) => !v)}
+                title="Hiện/ẩn số trên cột"
+              >
+                123
+              </button>
+            </div>
+            <div className="chart-legend tiny muted">
+              {chartMode === 'revenue' ? (
+                <>
+                  <span>
+                    <i className="dot" style={{ background: 'var(--accent)', opacity: 0.35 }} /> Ra
+                    phiếu
+                  </span>
+                  <span>
+                    <i className="dot" style={{ background: 'var(--accent)' }} /> Đã thu
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span>
+                    <i className="dot" style={{ background: CHART_COLORS[0] }} /> Tiền trọ
+                  </span>
+                  <span>
+                    <i className="dot" style={{ background: CHART_COLORS[1] }} /> Tiền điện
+                  </span>
+                  <span>
+                    <i className="dot" style={{ background: CHART_COLORS[2] }} /> Tiền nước
+                  </span>
+                </>
+              )}
+            </div>
+            <RevenueChart months={months} year={year} mode={chartMode} showValues={showValues} />
+          </Card>
 
-      <Card title={`Điện nước năm ${year}`}>
-        <div className="row between">
-          <span className="muted small">Điện tiêu thụ</span>
-          <span className="num strong">{formatNumber(kwhYear)} kWh</span>
-        </div>
-        <div className="row between" style={{ marginTop: 6 }}>
-          <span className="muted small">Nước tiêu thụ</span>
-          <span className="num strong">{formatNumber(m3Year)} m³</span>
-        </div>
-      </Card>
+          <Card title={`Tổng kết năm ${year}`}>
+            <BreakdownRows breakdown={yearBreakdown} />
+          </Card>
 
-      <Card title={`Theo tháng · bấm để xem chi tiết`}>
-        <div className="stack">
-          {months
-            .filter((m) => m.count > 0)
-            .map((month) => {
-              const open = openMonth === month.period
-              const rate = month.billed > 0 ? Math.round((month.collected / month.billed) * 100) : 100
-              return (
-                <div key={month.period} style={{ paddingBottom: 12, borderBottom: '1px solid var(--line)' }}>
-                  <button
-                    type="button"
-                    className="row between month-row"
-                    onClick={() => setOpenMonth(open ? null : month.period)}
-                  >
-                    <span className="small strong">{dt.formatPeriod(month.period)}</span>
-                    <span className="num small">
-                      {formatMoney(month.billed)} đ
-                      <span className="muted"> · thu {rate}%</span>
-                      <span className="month-caret">{open ? '▾' : '▸'}</span>
-                    </span>
-                  </button>
-                  {open ? (
-                    <div className="stack tight" style={{ marginTop: 10 }}>
-                      <div className="row between small">
-                        <span className="muted">Đã thu</span>
-                        <span className="num" style={{ color: 'var(--ok)' }}>{formatMoney(month.collected)} đ</span>
-                      </div>
-                      {month.debt > 0 && (
-                        <div className="row between small">
-                          <span className="muted">Còn nợ từ phiếu tháng này</span>
-                          <span className="num" style={{ color: 'var(--danger)' }}>{formatMoney(month.debt)} đ</span>
+          <Card title={`Điện nước năm ${year}`}>
+            <div className="row between">
+              <span className="muted small">Điện tiêu thụ</span>
+              <span className="num strong">{formatNumber(kwhYear)} kWh</span>
+            </div>
+            <div className="row between" style={{ marginTop: 6 }}>
+              <span className="muted small">Nước tiêu thụ</span>
+              <span className="num strong">{formatNumber(m3Year)} m³</span>
+            </div>
+          </Card>
+
+          <Card title={`Theo tháng · bấm để xem chi tiết`}>
+            <div className="stack">
+              {months
+                .filter(
+                  (m) =>
+                    m.count > 0 || m.cashAmount !== 0 || m.transferAmount !== 0,
+                )
+                .map((month) => {
+                  const open = openMonth === month.period
+                  const rate =
+                    month.billed > 0 ? Math.round((month.collected / month.billed) * 100) : 100
+                  return (
+                    <div
+                      key={month.period}
+                      style={{ paddingBottom: 12, borderBottom: '1px solid var(--line)' }}
+                    >
+                      <button
+                        type="button"
+                        className="row between month-row"
+                        onClick={() => setOpenMonth(open ? null : month.period)}
+                      >
+                        <span className="small strong">{dt.formatPeriod(month.period)}</span>
+                        <span className="num small">
+                          {formatMoney(month.billed)} đ
+                          <span className="muted"> · thu {rate}%</span>
+                          <span className="month-caret">{open ? '▾' : '▸'}</span>
+                        </span>
+                      </button>
+                      {!open && (
+                        <div className="tiny muted" style={{ marginTop: 4 }}>
+                          Mặt {formatMoney(month.cashAmount)} ({month.cashRooms} phòng) · CK{' '}
+                          {formatMoney(month.transferAmount)} ({month.transferRooms} phòng)
                         </div>
                       )}
-                      {month.kwh > 0 && (
-                        <div className="row between small">
-                          <span className="muted">Điện</span>
-                          <span className="num">{formatNumber(month.kwh)} kWh</span>
+                      {open ? (
+                        <div className="stack tight" style={{ marginTop: 10 }}>
+                          <div className="row between small">
+                            <span className="muted">Đã thu</span>
+                            <span className="num" style={{ color: 'var(--ok)' }}>
+                              {formatMoney(month.collected)} đ
+                            </span>
+                          </div>
+                          <div className="row between small">
+                            <span className="muted">Tiền mặt</span>
+                            <span className="num">
+                              {formatMoney(month.cashAmount)} đ
+                              <span className="muted"> · {month.cashRooms} phòng</span>
+                            </span>
+                          </div>
+                          <div className="row between small">
+                            <span className="muted">Chuyển khoản</span>
+                            <span className="num">
+                              {formatMoney(month.transferAmount)} đ
+                              <span className="muted"> · {month.transferRooms} phòng</span>
+                            </span>
+                          </div>
+                          {month.debt > 0 && (
+                            <div className="row between small">
+                              <span className="muted">Còn nợ từ phiếu tháng này</span>
+                              <span className="num" style={{ color: 'var(--danger)' }}>
+                                {formatMoney(month.debt)} đ
+                              </span>
+                            </div>
+                          )}
+                          {month.kwh > 0 && (
+                            <div className="row between small">
+                              <span className="muted">Điện</span>
+                              <span className="num">{formatNumber(month.kwh)} kWh</span>
+                            </div>
+                          )}
+                          {month.m3 > 0 && (
+                            <div className="row between small">
+                              <span className="muted">Nước</span>
+                              <span className="num">{formatNumber(month.m3)} m³</span>
+                            </div>
+                          )}
+                          <BreakdownRows breakdown={month.breakdown} />
                         </div>
+                      ) : (
+                        <BreakdownRows breakdown={month.breakdown} compact />
                       )}
-                      {month.m3 > 0 && (
-                        <div className="row between small">
-                          <span className="muted">Nước</span>
-                          <span className="num">{formatNumber(month.m3)} m³</span>
-                        </div>
-                      )}
-                      <BreakdownRows breakdown={month.breakdown} />
                     </div>
-                  ) : (
-                    <BreakdownRows breakdown={month.breakdown} compact />
-                  )}
-                </div>
-              )
-            })}
-        </div>
-      </Card>
+                  )
+                })}
+            </div>
+          </Card>
 
-      <Card title="Hiện trạng phòng">
-        <div className="row between small">
-          <span className="muted">Đang có khách</span>
-          <span className="num strong">{occupancy.occupied.length}/{data.rooms.length} · {occupancy.rate}%</span>
-        </div>
-        <div className="row between" style={{ marginTop: 6 }}>
-          <span className="muted small">Tiền cọc đang giữ</span>
-          <span className="num">{formatMoney(totalDepositHeld(data))} đ</span>
-        </div>
-        {best && (
-          <div className="row between" style={{ marginTop: 6 }}>
-            <span className="muted small">Tháng ra phiếu cao nhất</span>
-            <span className="num small">{dt.formatPeriod(best.period)} · {formatMoney(best.billed)} đ</span>
-          </div>
-        )}
-      </Card>
-
-      <Card title={`Phiếu còn nợ (${debts.length})`}>
-        {debts.length === 0 ? (
-          <div className="muted small">Không còn khoản nào chưa thu.</div>
-        ) : (
-          <div className="stack tight">
-            {debts.map(({ invoice, remaining }) => (
-              <div className="row between" key={invoice.id}>
-                <span className="small">
-                  {roomName.get(invoice.roomId)} · {dt.formatDate(invoice.issueDate)}
-                </span>
-                <span className="num small" style={{ color: 'var(--danger)' }}>
-                  {formatMoney(remaining)} đ
+          <Card title="Hiện trạng phòng">
+            <div className="row between small">
+              <span className="muted">Đang có khách</span>
+              <span className="num strong">
+                {occupancy.occupied.length}/{data.rooms.length} · {occupancy.rate}%
+              </span>
+            </div>
+            <div className="row between" style={{ marginTop: 6 }}>
+              <span className="muted small">Tiền cọc đang giữ</span>
+              <span className="num">{formatMoney(totalDepositHeld(data))} đ</span>
+            </div>
+            {best && (
+              <div className="row between" style={{ marginTop: 6 }}>
+                <span className="muted small">Tháng ra phiếu cao nhất</span>
+                <span className="num small">
+                  {dt.formatPeriod(best.period)} · {formatMoney(best.billed)} đ
                 </span>
               </div>
-            ))}
-          </div>
-        )}
-      </Card>
+            )}
+          </Card>
 
-      <button className="btn block" onClick={exportCsv}>
-        Xuất CSV mở bằng Excel
-      </button>
+          <Card title={`Phiếu còn nợ (${debts.length})`}>
+            {debts.length === 0 ? (
+              <div className="muted small">Không còn khoản nào chưa thu.</div>
+            ) : (
+              <div className="stack tight">
+                {debts.map(({ invoice, remaining }) => (
+                  <div className="row between" key={invoice.id}>
+                    <span className="small">
+                      {roomName.get(invoice.roomId)} · {dt.formatDate(invoice.issueDate)}
+                    </span>
+                    <span className="num small" style={{ color: 'var(--danger)' }}>
+                      {formatMoney(remaining)} đ
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <button className="btn block" onClick={exportCsv}>
+            Xuất CSV mở bằng Excel
+          </button>
+        </>
+      )}
     </Page>
   )
 }

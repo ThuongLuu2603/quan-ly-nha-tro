@@ -37,6 +37,7 @@ function dataset(invoices: Invoice[]): Dataset {
     tenants: [],
     readings: [],
     invoices,
+    expenses: [],
     settings: DEFAULT_SETTINGS,
     ready: true,
   }
