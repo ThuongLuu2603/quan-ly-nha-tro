@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildLedgerEntries,
+  buildLedgerWindow,
   collectByMethodInPeriod,
+  rangeForPeriod,
   summarizeLedger,
   withRunningBalance,
 } from './cashflow'
@@ -97,7 +99,7 @@ describe('ledger sao ke', () => {
       },
     ]
 
-    const entries = buildLedgerEntries(invoices, expenses, () => 'Nhà Trước', 2026)
+    const entries = buildLedgerEntries(invoices, expenses, () => 'Nhà Trước', rangeForPeriod('2026-09'))
     expect(entries).toHaveLength(4)
     expect(entries.filter((e) => e.direction === 'in')).toHaveLength(2)
     expect(entries.filter((e) => e.direction === 'out')).toHaveLength(2)
@@ -110,8 +112,39 @@ describe('ledger sao ke', () => {
     expect(summary.transferIn).toBe(1_000_000)
     expect(summary.electricOut).toBe(800_000)
     expect(summary.waterOut).toBe(200_000)
+    expect(summary.cashRooms).toBe(1)
+    expect(summary.transferRooms).toBe(1)
 
     const withBal = withRunningBalance(entries)
     expect(withBal[withBal.length - 1]?.balance).toBe(3_000_000)
+  })
+
+  it('cua so thang co so du dau ky tu thang truoc', () => {
+    const invoices = [
+      invoice({
+        id: 'i1',
+        roomId: 'r1',
+        payments: [
+          { id: 'p0', date: '2026-08-20', amount: 5_000_000, method: 'cash' },
+          { id: 'p1', date: '2026-09-02', amount: 1_000_000, method: 'cash' },
+        ],
+      }),
+    ]
+    const expenses: Expense[] = [
+      {
+        id: 'e1',
+        date: '2026-09-10',
+        kind: 'electric',
+        amount: 400_000,
+        createdAt: '2026-09-10T00:00:00.000Z',
+      },
+    ]
+
+    const window = buildLedgerWindow(invoices, expenses, () => 'P01', rangeForPeriod('2026-09'))
+    expect(window.opening).toBe(5_000_000)
+    expect(window.entries).toHaveLength(2)
+    expect(window.summary.totalIn).toBe(1_000_000)
+    expect(window.summary.totalOut).toBe(400_000)
+    expect(window.closing).toBe(5_600_000)
   })
 })

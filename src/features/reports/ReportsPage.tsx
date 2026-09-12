@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { addExpense, deleteExpense } from '../../data/actions'
 import { totalDepositHeld } from '../../data/selectors'
 import { useDataset } from '../../data/store'
@@ -12,20 +12,23 @@ import {
   type RevenueBreakdown,
 } from '../../domain/billing'
 import {
-  buildLedgerEntries,
+  buildLedgerWindow,
   collectByMethodInPeriod,
-  summarizeLedger,
+  rangeForPeriod,
+  rangeForYear,
   withRunningBalance,
+  type DateRange,
 } from '../../domain/cashflow'
 import * as dt from '../../domain/dates'
 import { buildRoomById, compareInvoicesByRoom } from '../../domain/roomOrder'
 import { formatMoney, formatNumber } from '../../domain/money'
 import { downloadBlob } from '../../receipt/share'
 import { OfflineReadOnlyError } from '../../sync/mutation'
-import type { ExpenseKind, Invoice, Period } from '../../domain/types'
+import type { ExpenseKind, ISODate, Invoice, Period } from '../../domain/types'
 import {
   Banner,
   Card,
+  DateInput,
   EmptyState,
   Field,
   MoneyInput,
@@ -235,6 +238,8 @@ function RevenueChart({
   )
 }
 
+type LedgerScope = 'month' | 'year' | 'range'
+
 function CashflowTab({ year }: { year: number }) {
   const data = useDataset()
   const { toast, toastNode } = useToast()
@@ -244,20 +249,55 @@ function CashflowTab({ year }: { year: number }) {
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const currentPeriod = dt.periodOf(dt.today())
+  const [scope, setScope] = useState<LedgerScope>('month')
+  const [month, setMonth] = useState<Period>(() =>
+    currentPeriod.startsWith(String(year)) ? currentPeriod : `${year}-01`,
+  )
+  const [rangeFrom, setRangeFrom] = useState<ISODate>(() => dt.periodBounds(currentPeriod).start)
+  const [rangeTo, setRangeTo] = useState<ISODate>(() => dt.today())
+
+  useEffect(() => {
+    if (month.startsWith(String(year))) return
+    const todayPeriod = dt.periodOf(dt.today())
+    setMonth((todayPeriod.startsWith(String(year)) ? todayPeriod : `${year}-01`) as Period)
+  }, [year, month])
+
   const roomById = useMemo(() => new Map(data.rooms.map((r) => [r.id, r.name])), [data.rooms])
 
-  const entries = useMemo(
+  const yearMonths = useMemo(() => dt.periodRange(`${year}-01`, `${year}-12`), [year])
+
+  const range: DateRange = useMemo(() => {
+    if (scope === 'year') return rangeForYear(year)
+    if (scope === 'month') return rangeForPeriod(month)
+    const from = rangeFrom <= rangeTo ? rangeFrom : rangeTo
+    const to = rangeFrom <= rangeTo ? rangeTo : rangeFrom
+    return { from, to }
+  }, [scope, year, month, rangeFrom, rangeTo])
+
+  const ledger = useMemo(
     () =>
-      buildLedgerEntries(
+      buildLedgerWindow(
         data.invoices,
         data.expenses,
         (roomId) => roomById.get(roomId) ?? 'Phòng',
-        year,
+        range,
       ),
-    [data.invoices, data.expenses, roomById, year],
+    [data.invoices, data.expenses, roomById, range],
   )
-  const rows = useMemo(() => withRunningBalance(entries), [entries])
-  const summary = useMemo(() => summarizeLedger(entries), [entries])
+
+  const rows = useMemo(
+    () => withRunningBalance(ledger.entries, ledger.opening),
+    [ledger.entries, ledger.opening],
+  )
+  const summary = ledger.summary
+
+  const rangeLabel =
+    scope === 'year'
+      ? `năm ${year}`
+      : scope === 'month'
+        ? dt.formatPeriod(month)
+        : `${dt.formatDate(range.from)} – ${dt.formatDate(range.to)}`
 
   const saveExpense = async () => {
     if (amount <= 0 || saving) return
@@ -301,39 +341,105 @@ function CashflowTab({ year }: { year: number }) {
 
   return (
     <>
+      <Card title="Chọn giai đoạn">
+        <div className="chip-row" style={{ marginBottom: 10 }}>
+          <button
+            type="button"
+            className={scope === 'month' ? 'chip active' : 'chip'}
+            onClick={() => setScope('month')}
+          >
+            Theo tháng
+          </button>
+          <button
+            type="button"
+            className={scope === 'year' ? 'chip active' : 'chip'}
+            onClick={() => setScope('year')}
+          >
+            Cả năm {year}
+          </button>
+          <button
+            type="button"
+            className={scope === 'range' ? 'chip active' : 'chip'}
+            onClick={() => setScope('range')}
+          >
+            Khoảng ngày
+          </button>
+        </div>
+
+        {scope === 'month' && (
+          <div className="chip-row">
+            {yearMonths.map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={p === month ? 'chip active' : 'chip'}
+                onClick={() => setMonth(p)}
+              >
+                {dt.formatPeriodShort(p)}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {scope === 'range' && (
+          <div className="grid-2">
+            <Field label="Từ ngày">
+              <DateInput value={rangeFrom} onChange={(v) => setRangeFrom(v as ISODate)} />
+            </Field>
+            <Field label="Đến ngày">
+              <DateInput value={rangeTo} onChange={(v) => setRangeTo(v as ISODate)} />
+            </Field>
+          </div>
+        )}
+
+        <div className="tiny muted" style={{ marginTop: 8 }}>
+          Đang xem: <strong>{rangeLabel}</strong>
+        </div>
+      </Card>
+
       <div className="stat-grid" style={{ marginBottom: 14 }}>
         <div className="stat">
-          <div className="label">Tổng thu {year}</div>
+          <div className="label">Thu kỳ này</div>
           <div className="value" style={{ color: 'var(--ok)' }}>
             {formatMoney(summary.totalIn)}
           </div>
         </div>
         <div className="stat">
-          <div className="label">Tổng chi</div>
+          <div className="label">Chi kỳ này</div>
           <div className="value" style={{ color: 'var(--danger)' }}>
             {formatMoney(summary.totalOut)}
           </div>
         </div>
         <div className="stat">
-          <div className="label">Còn lại</div>
+          <div className="label">Số dư cuối kỳ</div>
           <div
             className="value"
-            style={{ color: summary.balance >= 0 ? 'var(--accent)' : 'var(--danger)' }}
+            style={{ color: ledger.closing >= 0 ? 'var(--accent)' : 'var(--danger)' }}
           >
-            {formatMoney(summary.balance)}
+            {formatMoney(ledger.closing)}
           </div>
         </div>
       </div>
 
-      <Card title="Tóm tắt quỹ">
+      <Card title={`Tóm tắt · ${rangeLabel}`}>
         <div className="stack tight">
           <div className="row between small">
+            <span className="muted">Số dư đầu kỳ</span>
+            <span className="num">{formatMoney(ledger.opening)} đ</span>
+          </div>
+          <div className="row between small">
             <span className="muted">Thu tiền mặt</span>
-            <span className="num">{formatMoney(summary.cashIn)} đ</span>
+            <span className="num">
+              {formatMoney(summary.cashIn)} đ
+              <span className="muted"> · {summary.cashRooms} phòng</span>
+            </span>
           </div>
           <div className="row between small">
             <span className="muted">Thu chuyển khoản</span>
-            <span className="num">{formatMoney(summary.transferIn)} đ</span>
+            <span className="num">
+              {formatMoney(summary.transferIn)} đ
+              <span className="muted"> · {summary.transferRooms} phòng</span>
+            </span>
           </div>
           <div className="row between small">
             <span className="muted">Chi tiền điện</span>
@@ -351,8 +457,8 @@ function CashflowTab({ year }: { year: number }) {
             className="row between"
             style={{ marginTop: 4, paddingTop: 8, borderTop: '1px solid var(--line)' }}
           >
-            <span className="small strong">Số dư hiện tại</span>
-            <span className="num strong">{formatMoney(summary.balance)} đ</span>
+            <span className="small strong">Số dư cuối kỳ</span>
+            <span className="num strong">{formatMoney(ledger.closing)} đ</span>
           </div>
         </div>
       </Card>
@@ -381,12 +487,7 @@ function CashflowTab({ year }: { year: number }) {
           </div>
           <div className="grid-2">
             <Field label="Ngày chi">
-              <input
-                className="input"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value as typeof date)}
-              />
+              <DateInput value={date} onChange={(v) => setDate(v as ISODate)} />
             </Field>
             <Field label="Số tiền">
               <MoneyInput value={amount} onChange={setAmount} />
@@ -409,10 +510,11 @@ function CashflowTab({ year }: { year: number }) {
         </div>
       </Card>
 
-      <Card title={`Sao kê ${year}`}>
-        {rows.length === 0 ? (
+      <Card title={`Sao kê · ${rangeLabel}`}>
+        {rows.length === 0 && ledger.opening === 0 ? (
           <div className="muted small">
-            Chưa có dòng nào. Thu tiền trên phiếu sẽ hiện ở đây; chi điện/nước ghi ở form trên.
+            Chưa có dòng nào trong giai đoạn này. Thu tiền trên phiếu sẽ hiện ở đây; chi điện/nước ghi
+            ở form trên.
           </div>
         ) : (
           <div className="ledger">
@@ -422,6 +524,13 @@ function CashflowTab({ year }: { year: number }) {
               <span className="right">Vào</span>
               <span className="right">Ra</span>
               <span className="right">Số dư</span>
+            </div>
+            <div className="ledger-row">
+              <span className="tiny muted">{dt.formatDate(range.from)}</span>
+              <span className="small strong">Số dư đầu kỳ</span>
+              <span />
+              <span />
+              <span className="num tiny right strong">{formatMoney(ledger.opening)}</span>
             </div>
             {rows.map((row) => (
               <div className="ledger-row" key={row.id}>
