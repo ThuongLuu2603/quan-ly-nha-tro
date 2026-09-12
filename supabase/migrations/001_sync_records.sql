@@ -10,7 +10,8 @@ create table if not exists public.sync_records (
       'tenant',
       'reading',
       'invoice',
-      'settings'
+      'settings',
+      'expense'
     )
   ),
   entity_id text not null,

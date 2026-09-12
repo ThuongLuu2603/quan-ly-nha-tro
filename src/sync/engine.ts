@@ -23,6 +23,18 @@ function notify(status: SyncStatus, detail?: string): void {
   for (const listener of listeners) listener(status, detail)
 }
 
+function syncErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message
+  if (error && typeof error === 'object') {
+    const record = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown }
+    const parts = [record.message, record.details, record.hint, record.code]
+      .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+    if (parts.length > 0) return parts.join(' · ')
+  }
+  if (typeof error === 'string' && error.trim()) return error
+  return 'Không đẩy được dữ liệu lên cloud'
+}
+
 export interface SyncDiagnostics {
   localRooms: number
   cloudRooms: number
@@ -112,8 +124,7 @@ export async function runSync(options: RunSyncOptions = {}): Promise<void> {
     await pullRemote(auth.session.user.id)
     notify('ok')
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Lỗi đồng bộ'
-    notify('error', message)
+    notify('error', syncErrorMessage(error))
   } finally {
     syncing = false
     if (syncQueued) {
