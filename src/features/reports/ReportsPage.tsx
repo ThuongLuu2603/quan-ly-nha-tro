@@ -449,6 +449,17 @@ function CashflowTab({ year }: { year: number }) {
               {formatMoney(summary.otherIn)} đ
             </span>
           </div>
+          {otherInItems.map((item) => (
+            <div className="row between small" key={item.id} style={{ paddingLeft: 12 }}>
+              <span className="muted tiny">
+                {dt.formatDate(item.date)}
+                {item.detail ? ` · ${item.detail}` : ''}
+              </span>
+              <span className="num tiny" style={{ color: 'var(--ok)' }}>
+                {formatMoney(item.amount)} đ
+              </span>
+            </div>
+          ))}
           <div className="row between small">
             <span className="muted">Chi tiền điện</span>
             <span className="num" style={{ color: 'var(--danger)' }}>
@@ -462,11 +473,27 @@ function CashflowTab({ year }: { year: number }) {
             </span>
           </div>
           <div className="row between small">
-            <span className="muted">Chi khác</span>
+            <span className="muted">
+              Chi khác
+              {otherOutItems.length > 0 ? (
+                <span className="tiny"> · {otherOutItems.length} khoản</span>
+              ) : null}
+            </span>
             <span className="num" style={{ color: 'var(--danger)' }}>
               {formatMoney(summary.otherOut)} đ
             </span>
           </div>
+          {otherOutItems.map((item) => (
+            <div className="row between small" key={item.id} style={{ paddingLeft: 12 }}>
+              <span className="muted tiny">
+                {dt.formatDate(item.date)}
+                {item.detail ? ` · ${item.detail}` : ' · Chi khác'}
+              </span>
+              <span className="num tiny" style={{ color: 'var(--danger)' }}>
+                {formatMoney(item.amount)} đ
+              </span>
+            </div>
+          ))}
           <div
             className="row between"
             style={{ marginTop: 4, paddingTop: 8, borderTop: '1px solid var(--line)' }}
