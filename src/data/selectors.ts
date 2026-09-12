@@ -1,5 +1,6 @@
 import {
   outstandingOf,
+  paymentMethodLabel,
   readingsToMap,
   roomCollectsMeteredUtilities,
   statusOf,
@@ -198,13 +199,17 @@ export function meterBaselineForTenancy(
 
 export function invoiceStatusLabel(invoice: Invoice, absorbedByCode?: string): string {
   const status = statusOf(invoice)
+  const method = paymentMethodLabel(invoice)
   if (status === 'paid') {
     if (wasCarriedForward(invoice)) {
       return absorbedByCode ? `Đã gộp vào ${absorbedByCode}` : 'Đã gộp vào phiếu sau'
     }
-    return invoice.total < 0 ? 'Đã trả khách' : 'Đã thu'
+    if (invoice.total < 0) return 'Đã trả khách'
+    return method ? `Đã thu · ${method}` : 'Đã thu'
   }
-  if (status === 'partial') return 'Thu một phần'
+  if (status === 'partial') {
+    return method ? `Thu một phần · ${method}` : 'Thu một phần'
+  }
   return invoice.total < 0 ? 'Chưa trả khách' : 'Chưa thu'
 }
 

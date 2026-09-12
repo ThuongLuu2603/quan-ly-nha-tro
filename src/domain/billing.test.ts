@@ -9,6 +9,7 @@ import {
   outstandingOf,
   ownTotal,
   paidAmount,
+  paymentMethodLabel,
   revenueBreakdownFromInvoices,
   revenueBreakdownTotal,
   readingsToMap,
@@ -247,6 +248,47 @@ describe('so sach khi don no sang phieu sau', () => {
     expect(wasCarriedForward(invoice)).toBe(true)
   })
 })
+
+describe('nhan phuong thuc thu', () => {
+  it('tien mat / chuyen khoan / ca hai', () => {
+    expect(
+      paymentMethodLabel({
+        ...invoiceBase(),
+        payments: [{ id: 'p1', date: '2026-09-01', amount: 100, method: 'cash' }],
+      }),
+    ).toBe('Tiền mặt')
+    expect(
+      paymentMethodLabel({
+        ...invoiceBase(),
+        payments: [{ id: 'p1', date: '2026-09-01', amount: 100, method: 'transfer' }],
+      }),
+    ).toBe('Chuyển khoản')
+    expect(
+      paymentMethodLabel({
+        ...invoiceBase(),
+        payments: [
+          { id: 'p1', date: '2026-09-01', amount: 50, method: 'cash' },
+          { id: 'p2', date: '2026-09-02', amount: 50, method: 'transfer' },
+        ],
+      }),
+    ).toBe('Tiền mặt + CK')
+  })
+})
+
+function invoiceBase(): Invoice {
+  return {
+    id: 'i-method',
+    code: 'P101',
+    roomId: 'r1',
+    tenancyId: 't1',
+    kind: 'monthly',
+    issueDate: '2026-09-01',
+    lines: [],
+    total: 100,
+    payments: [],
+    createdAt: '2026-09-01T00:00:00.000Z',
+  }
+}
 
 describe('tra phong va tat toan coc', () => {
   it('hoan tien phong nhung ngay chua o va tru vao coc', () => {

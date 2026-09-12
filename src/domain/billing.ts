@@ -47,6 +47,26 @@ export function cashPaidAmount(invoice: Invoice): number {
   return invoice.payments.reduce((acc, p) => (p.method === 'carried' ? acc : acc + p.amount), 0)
 }
 
+/** Phuong thuc thu thuc te tren phieu (bo carried). */
+export function paymentMethodsOf(invoice: Invoice): { cash: boolean; transfer: boolean } {
+  let cash = false
+  let transfer = false
+  for (const payment of invoice.payments) {
+    if (payment.method === 'cash' && payment.amount !== 0) cash = true
+    if (payment.method === 'transfer' && payment.amount !== 0) transfer = true
+  }
+  return { cash, transfer }
+}
+
+/** Nhan ngan gon: Tiền mặt / Chuyển khoản / Tiền mặt + CK. */
+export function paymentMethodLabel(invoice: Invoice): string | null {
+  const { cash, transfer } = paymentMethodsOf(invoice)
+  if (cash && transfer) return 'Tiền mặt + CK'
+  if (cash) return 'Tiền mặt'
+  if (transfer) return 'Chuyển khoản'
+  return null
+}
+
 /** Tong tien phat sinh that su cua phieu, khong tinh dong no mang tu ky truoc. */
 export function ownTotal(invoice: Invoice): number {
   return invoice.lines.reduce((acc, l) => (l.type === 'carryOver' ? acc : acc + l.amount), 0)
