@@ -311,7 +311,13 @@ function CashflowTab({ year }: { year: number }) {
       })
       setAmount(0)
       setNote('')
-      toast(kind === 'electric' ? 'Đã ghi chi tiền điện' : 'Đã ghi chi tiền nước')
+      toast(
+        kind === 'electric'
+          ? 'Đã ghi chi tiền điện'
+          : kind === 'water'
+            ? 'Đã ghi chi tiền nước'
+            : 'Đã ghi chi khác',
+      )
     } catch (error) {
       toast(
         error instanceof OfflineReadOnlyError
@@ -453,6 +459,12 @@ function CashflowTab({ year }: { year: number }) {
               {formatMoney(summary.waterOut)} đ
             </span>
           </div>
+          <div className="row between small">
+            <span className="muted">Chi khác</span>
+            <span className="num" style={{ color: 'var(--danger)' }}>
+              {formatMoney(summary.otherOut)} đ
+            </span>
+          </div>
           <div
             className="row between"
             style={{ marginTop: 4, paddingTop: 8, borderTop: '1px solid var(--line)' }}
@@ -463,10 +475,10 @@ function CashflowTab({ year }: { year: number }) {
         </div>
       </Card>
 
-      <Card title="Ghi chi điện / nước">
+      <Card title="Ghi khoản chi">
         <Banner tone="info">
-          Mỗi lần thu tiền mặt hoặc chuyển khoản tự thành <strong>1 dòng Vào</strong>. Chi điện/nước
-          bạn nhập ở đây thành <strong>1 dòng Ra</strong>.
+          Mỗi lần thu tiền mặt hoặc chuyển khoản tự thành <strong>1 dòng Vào</strong>. Chi điện / nước
+          / khác bạn nhập ở đây thành <strong>1 dòng Ra</strong>.
         </Banner>
         <div className="stack" style={{ marginTop: 12 }}>
           <div className="chip-row">
@@ -484,6 +496,13 @@ function CashflowTab({ year }: { year: number }) {
             >
               Chi tiền nước
             </button>
+            <button
+              type="button"
+              className={kind === 'other' ? 'chip active' : 'chip'}
+              onClick={() => setKind('other')}
+            >
+              Chi khác
+            </button>
           </div>
           <div className="grid-2">
             <Field label="Ngày chi">
@@ -493,16 +512,25 @@ function CashflowTab({ year }: { year: number }) {
               <MoneyInput value={amount} onChange={setAmount} />
             </Field>
           </div>
-          <Field label="Ghi chú" hint="Tuỳ chọn — hoá đơn EVN, kỳ tháng...">
+          <Field
+            label="Ghi chú"
+            hint={kind === 'other' ? 'Nên ghi rõ nội dung chi' : 'Tuỳ chọn — hoá đơn EVN, kỳ tháng...'}
+          >
             <TextInput
               value={note}
               onChange={setNote}
-              placeholder={kind === 'electric' ? 'VD: Điện T08/2026' : 'VD: Nước T08/2026'}
+              placeholder={
+                kind === 'electric'
+                  ? 'VD: Điện T08/2026'
+                  : kind === 'water'
+                    ? 'VD: Nước T08/2026'
+                    : 'VD: Sửa ống nước, mua khóa...'
+              }
             />
           </Field>
           <button
             className="btn primary block"
-            disabled={amount <= 0 || saving}
+            disabled={amount <= 0 || saving || (kind === 'other' && !note.trim())}
             onClick={() => void saveExpense()}
           >
             {saving ? 'Đang lưu...' : 'Ghi khoản chi'}

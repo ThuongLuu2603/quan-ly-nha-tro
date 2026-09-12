@@ -22,6 +22,7 @@ export interface LedgerEntry {
   /** Liên kết phiếu (khoản thu) hoặc chi phí. */
   source: 'payment' | 'expense'
   expenseId?: ID
+  expenseKind?: ExpenseKind
   invoiceId?: ID
   roomId?: ID
 }
@@ -35,6 +36,7 @@ export interface LedgerSummary {
   transferIn: number
   electricOut: number
   waterOut: number
+  otherOut: number
   cashRooms: number
   transferRooms: number
 }
@@ -102,6 +104,8 @@ export function expenseKindLabel(kind: ExpenseKind): string {
       return 'Chi tiền điện'
     case 'water':
       return 'Chi tiền nước'
+    case 'other':
+      return 'Chi khác'
     default: {
       const _exhaustive: never = kind
       return _exhaustive
@@ -153,6 +157,7 @@ export function buildLedgerEntries(
       detail: expense.note,
       source: 'expense',
       expenseId: expense.id,
+      expenseKind: expense.kind,
     })
   }
 
@@ -174,6 +179,7 @@ export function summarizeLedger(entries: LedgerEntry[]): LedgerSummary {
   let transferIn = 0
   let electricOut = 0
   let waterOut = 0
+  let otherOut = 0
   const cashRooms = new Set<ID>()
   const transferRooms = new Set<ID>()
 
@@ -190,8 +196,24 @@ export function summarizeLedger(entries: LedgerEntry[]): LedgerSummary {
       }
     } else {
       totalOut += entry.amount
-      if (entry.label.includes('điện')) electricOut += entry.amount
-      if (entry.label.includes('nước')) waterOut += entry.amount
+      switch (entry.expenseKind) {
+        case 'electric':
+          electricOut += entry.amount
+          break
+        case 'water':
+          waterOut += entry.amount
+          break
+        case 'other':
+          otherOut += entry.amount
+          break
+        case undefined:
+          // Hoàn tiền / dòng ra không phải chi phí đã phân loại
+          break
+        default: {
+          const _exhaustive: never = entry.expenseKind
+          void _exhaustive
+        }
+      }
     }
   }
 
@@ -203,6 +225,7 @@ export function summarizeLedger(entries: LedgerEntry[]): LedgerSummary {
     transferIn,
     electricOut,
     waterOut,
+    otherOut,
     cashRooms: cashRooms.size,
     transferRooms: transferRooms.size,
   }

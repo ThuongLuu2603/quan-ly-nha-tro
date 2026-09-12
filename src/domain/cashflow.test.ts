@@ -112,11 +112,30 @@ describe('ledger sao ke', () => {
     expect(summary.transferIn).toBe(1_000_000)
     expect(summary.electricOut).toBe(800_000)
     expect(summary.waterOut).toBe(200_000)
+    expect(summary.otherOut).toBe(0)
     expect(summary.cashRooms).toBe(1)
     expect(summary.transferRooms).toBe(1)
 
     const withBal = withRunningBalance(entries)
     expect(withBal[withBal.length - 1]?.balance).toBe(3_000_000)
+  })
+
+  it('chi khac tinh dung otherOut', () => {
+    const expenses: Expense[] = [
+      {
+        id: 'e3',
+        date: '2026-09-08',
+        kind: 'other',
+        amount: 150_000,
+        note: 'Sửa khóa',
+        createdAt: '2026-09-08T00:00:00.000Z',
+      },
+    ]
+    const entries = buildLedgerEntries([], expenses, () => 'P01', rangeForPeriod('2026-09'))
+    const summary = summarizeLedger(entries)
+    expect(summary.otherOut).toBe(150_000)
+    expect(summary.totalOut).toBe(150_000)
+    expect(entries[0]?.label).toBe('Chi khác')
   })
 
   it('cua so thang co so du dau ky tu thang truoc', () => {
